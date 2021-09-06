@@ -1,0 +1,146 @@
+---
+title: "DATA 624 Homework 1"
+author: "Philip Tanofsky"
+date: "9/6/2021"
+output: html_document
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(fpp3)
+```
+
+## Exercise 2.1
+
+Use the help function to explore what the series `gafa_stock`, `PBS`, `vic_elec` and `pelt` represent.
+
+gafa_stock: historical stock prices from 2014-2018 for Google, Amazon, Facebook and Apple
+
+```{r warning=F, message=F}
+head(gafa_stock)
+
+head(PBS)
+
+head(vic_elec)
+
+head(pelt)
+```
+
+### A.
+
+Use autoplot() to plot some of the series in these data sets.
+
+### B.
+
+What is the time interval of each series?
+
+## Exercise 2.2
+
+Use `filter()` to find what days corresponded to the peak closing price for each of the four stocks in `gafa_stock`.
+
+## Exercise 2.3
+
+Download the file `tute1.csv` from the book website, open it in Excel (or some other spreadsheet application), and review its contents. You should find four columns of information. Columns B through D each contain a quarterly series, labelled Sales, AdBudget and GDP. Sales contains the quarterly sales for a small company over the period 1981-2005. AdBudget is the advertising budget and GDP is the gross domestic product. All series have been adjusted for inflation.
+
+### A. 
+
+You can read the data into R with the following script:
+
+```{r warning=F, message=F}
+tute1 <- readr::read_csv("tute1.csv")
+View(tute1)
+```
+
+### B. Convert the data to time series
+
+```{r warning=F, message=F}
+mytimeseries <- tute1 %>%
+  mutate(Quarter = yearmonth(Quarter)) %>%
+  as_tsibble(index = Quarter)
+```
+
+### C. Construct time series plots of each of the three series
+
+```{r warning=F, message=F}
+mytimeseries %>%
+  pivot_longer(-Quarter) %>%
+  ggplot(aes(x = Quarter, y = value, colour = name)) +
+  geom_line() +
+  facet_grid(name ~ ., scales = "free_y")
+```
+
+Check what happens when you don’t include facet_grid().
+
+## Exercise 2.4
+
+The `USgas` package contains data on the demand for natural gas in the US.
+
+### A. 
+
+Install the `USgas` package.
+
+```{r warning=F, message=F}
+library(USgas)
+```
+
+### B.
+
+Create a tsibble from `us_total` with year as the index and state as the key.
+
+```{r warning=F, message=F}
+ts <- us_total
+
+head(ts)
+```
+
+### C.
+
+Plot the annual natural gas consumption by state for the New England area (comprising the states of Maine, Vermont, New Hampshire, Massachusetts, Connecticut and Rhode Island).
+
+## Exercise 2.5
+
+### A.
+
+Download `tourism.xlsx` from the book website and read it into R using `readxl::read_excel()`.
+
+```{r warning=F, message=F}
+tourism_data <- readxl::read_excel("tourism.xlsx")
+
+head(tourism_data)
+```
+
+### B.
+
+Create a tsibble which is identical to the `tourism` tsibble from the tsibble package.
+
+### C.
+
+Find what combination of `Region` and `Purpose` had the maximum number of overnight trips on average.
+
+### D.
+
+Create a new tsibble which combines the Purposes and Regions, and just has total trips by State.
+
+## Exercise 2.8
+
+Monthly Australian retail data is provided in `aus_retail`. Select one of the time series as follows (but choose your own seed value):
+
+```{r warning=F, message=F}
+#set.seed(12345678)
+set.seed(8675309)
+myseries <- aus_retail %>%
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+```
+
+Explore your chosen retail time series using the following functions:
+
+`autoplot()`, `gg_season()`, `gg_subseries()`, `gg_lag()`, `ACF() %>% autoplot()`
+
+Can you spot any seasonality, cyclicity and trend? What do you learn about the series?
+
+
+
+
+
+
+
