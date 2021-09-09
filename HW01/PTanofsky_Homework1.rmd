@@ -14,7 +14,13 @@ library(fpp3)
 
 Use the help function to explore what the series `gafa_stock`, `PBS`, `vic_elec` and `pelt` represent.
 
-gafa_stock: historical stock prices from 2014-2018 for Google, Amazon, Facebook and Apple
+gafa_stock: Historical stock prices from 2014-2018 for Google, Amazon, Facebook and Apple. All prices are in $USD. Contains data on irregular trading days.
+
+PBS: Monthly tsibble with two values, Scripts for total number of scripts and Cost for cost of the scripts in $AUD
+
+vic_elec: Half-hourly tsibble with three values, Demand for total electricity demand in MW, Temperature for the temperature of Melbourne (BOM site 086071) and Holiday for the indicator for if that day is a public holiday.
+
+pelt: Hudson Bay Company trading records for Snowshoe Hare and Canadian Lynx furs from 1845 to 1935. This data contains trade records for all areas of the company.
 
 ```{r warning=F, message=F}
 head(gafa_stock)
@@ -30,13 +36,56 @@ head(pelt)
 
 Use autoplot() to plot some of the series in these data sets.
 
+```{r warning=F, message=F}
+autoplot(gafa_stock, Close) +
+  labs(title = "Closing price of the stock",
+       subtitle = "Google, Amazon, Facebook, Apple",
+       y = "Price")
+
+pbs_a10 <- PBS %>%
+  filter(ATC2 == "A10" & Concession == "Concessional" & Type == "Co-payments") %>%
+  select(Month, Cost)
+
+autoplot(pbs_a10, Cost) +
+  labs(title = "Total number of scripts",
+       subtitle = "Monthly Medicare Australia prescription data",
+       y = "Count")
+
+autoplot(vic_elec, Demand) +
+  labs(title = "Electricity Demand",
+       subtitle = "Victoria, Australia",
+       y = "MW")
+
+autoplot(pelt, Hare) +
+  labs(title = "Trading records of furs from 1845 to 1935",
+       subtitle = "Hudson Bay Company",
+       y = "Pelts Traded")
+```
+
 ### B.
 
 What is the time interval of each series?
 
+gafa_stock: One day, excluding days the stock market is closed
+
+PBS: One month
+
+vic_elect: 30 minutes
+
+pelt: One year
+
 ## Exercise 2.2
 
 Use `filter()` to find what days corresponded to the peak closing price for each of the four stocks in `gafa_stock`.
+
+```{r warning=F, message=F}
+result <- gafa_stock %>% 
+             group_by(Symbol) %>%
+             filter(Close == max(Close)) %>%
+             arrange(Symbol, Close)
+result
+```
+
 
 ## Exercise 2.3
 
@@ -57,6 +106,8 @@ View(tute1)
 mytimeseries <- tute1 %>%
   mutate(Quarter = yearmonth(Quarter)) %>%
   as_tsibble(index = Quarter)
+
+head(mytimeseries)
 ```
 
 ### C. Construct time series plots of each of the three series
@@ -70,6 +121,13 @@ mytimeseries %>%
 ```
 
 Check what happens when you don’t include facet_grid().
+
+```{r warning=F, message=F}
+mytimeseries %>%
+  pivot_longer(-Quarter) %>%
+  ggplot(aes(x = Quarter, y = value, colour = name)) +
+  geom_line()
+```
 
 ## Exercise 2.4
 
@@ -90,12 +148,39 @@ Create a tsibble from `us_total` with year as the index and state as the key.
 ```{r warning=F, message=F}
 ts <- us_total
 
+ts <- ts %>%
+  as_tsibble(index = year, key = state)
+
 head(ts)
 ```
 
 ### C.
 
 Plot the annual natural gas consumption by state for the New England area (comprising the states of Maine, Vermont, New Hampshire, Massachusetts, Connecticut and Rhode Island).
+
+```{r warning=F, message=F}
+ne_ts <- ts %>%
+  filter(state == 'Maine' |
+           state == 'Vermont' |
+           state == 'New Hampshire' |
+           state == 'Massachusetts' |
+           state == 'Connecticut' |
+           state == 'Rhode Island')
+
+head(ne_ts)
+
+autoplot(ne_ts, y) +
+  labs(title = "xxx",
+       subtitle = "xxx",
+       y = "xxx")
+```
+
+ne_ts %>%
+  pivot_longer(-year) %>%
+  ggplot(aes(x = year, y = value, colour = name)) +
+  geom_line() +
+  facet_grid(name ~ ., scales = "free_y")
+
 
 ## Exercise 2.5
 
@@ -141,6 +226,8 @@ Can you spot any seasonality, cyclicity and trend? What do you learn about the s
 
 
 
+```{r warning=F, message=F}
 
+```
 
 
