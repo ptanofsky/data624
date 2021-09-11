@@ -14,13 +14,13 @@ library(fpp3)
 
 Use the help function to explore what the series `gafa_stock`, `PBS`, `vic_elec` and `pelt` represent.
 
-gafa_stock: Historical stock prices from 2014-2018 for Google, Amazon, Facebook and Apple. All prices are in $USD. Contains data on irregular trading days.
+**gafa_stock:** Historical stock prices from 2014-2018 for Google, Amazon, Facebook and Apple. All prices are in $USD. Contains data on irregular trading days.
 
-PBS: Monthly tsibble with two values, Scripts for total number of scripts and Cost for cost of the scripts in $AUD
+**PBS:** Monthly tsibble with two values, Scripts for total number of scripts and Cost for cost of the scripts in $AUD
 
-vic_elec: Half-hourly tsibble with three values, Demand for total electricity demand in MW, Temperature for the temperature of Melbourne (BOM site 086071) and Holiday for the indicator for if that day is a public holiday.
+**vic_elec:** Half-hourly tsibble with three values, Demand for total electricity demand in MW, Temperature for the temperature of Melbourne (BOM site 086071) and Holiday for the indicator for if that day is a public holiday.
 
-pelt: Hudson Bay Company trading records for Snowshoe Hare and Canadian Lynx furs from 1845 to 1935. This data contains trade records for all areas of the company.
+**pelt:** Hudson Bay Company trading records for Snowshoe Hare and Canadian Lynx furs from 1845 to 1935. This data contains trade records for all areas of the company.
 
 ```{r warning=F, message=F}
 head(gafa_stock)
@@ -82,7 +82,7 @@ Use `filter()` to find what days corresponded to the peak closing price for each
 result <- gafa_stock %>% 
              group_by(Symbol) %>%
              filter(Close == max(Close)) %>%
-             arrange(Symbol, Close)
+             arrange(desc(Close))
 result
 ```
 
@@ -121,6 +121,9 @@ mytimeseries %>%
 ```
 
 Check what happens when you don’t include facet_grid().
+
+As seen below, without `facet_grid()`, the three time series are all graphed on the same graph instead of 3 individual graphs. I would argue this provides a more contextualized graph of the relationship between the three separate time series. With a shared y-axis, the relationships between the three time series are more evident than the separated graphs.
+
 
 ```{r warning=F, message=F}
 mytimeseries %>%
@@ -165,7 +168,9 @@ ne_ts <- ts %>%
            state == 'New Hampshire' |
            state == 'Massachusetts' |
            state == 'Connecticut' |
-           state == 'Rhode Island')
+           state == 'Rhode Island') %>%
+  mutate(y = y/1e3)
+
 
 head(ne_ts)
 
@@ -198,13 +203,53 @@ head(tourism_data)
 
 Create a tsibble which is identical to the `tourism` tsibble from the tsibble package.
 
+First, display `tourism` as sample.
+
+```{r warning=F, message=F}
+# Output tourism tsibble
+head(tourism)
+```
+
+Initial thoughts, five columns are the same. Steps: 1: Convert column Quarter into the index. 2: Define Region, State and Purpose as keys.
+
+```{r warning=F, message=F}
+# Convert tourism_data to tsibble
+tourism_ts <- tourism_data %>%
+  mutate(Quarter = yearquarter(Quarter)) %>%
+  as_tsibble(index = Quarter, key = c(Region, State, Purpose))
+
+head(tourism_ts)
+```
+
 ### C.
 
 Find what combination of `Region` and `Purpose` had the maximum number of overnight trips on average.
 
+```{r warning=F, message=F}
+tourism_by_reg_pur_ts <- tourism_data %>%
+  group_by(Region, Purpose) %>%
+  summarise(Trip_Avg = mean(Trips)) %>%
+  filter(Trip_Avg == max(Trip_Avg)) %>%
+  arrange(desc(Trip_Avg))
+
+head(tourism_by_reg_pur_ts)
+```
+
+**Answer:** Combination of region Sydney and purpose Visiting has the maximum number of overnight trips on average per quarter surveyed with a count of 747.
+
 ### D.
 
 Create a new tsibble which combines the Purposes and Regions, and just has total trips by State.
+
+```{r warning=F, message=F}
+trips_by_state <- tourism_ts %>%
+  group_by(State) %>%
+  summarise(Trips = sum(Trips)) %>%
+  mutate(Quarter = yearquarter(Quarter)) %>%
+  as_tsibble(index = Quarter, key = State)
+
+head(trips_by_state)
+```
 
 ## Exercise 2.8
 
@@ -213,13 +258,52 @@ Monthly Australian retail data is provided in `aus_retail`. Select one of the ti
 ```{r warning=F, message=F}
 #set.seed(12345678)
 set.seed(8675309)
+
 myseries <- aus_retail %>%
   filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+
+head(myseries)
+
+dim(myseries)
+
+unique(myseries$State)
+
+unique(myseries$Industry)
 ```
 
 Explore your chosen retail time series using the following functions:
 
 `autoplot()`, `gg_season()`, `gg_subseries()`, `gg_lag()`, `ACF() %>% autoplot()`
+
+```{r warning=F, message=F}
+autoplot(myseries, Turnover) +
+  labs(title = "Turnover in Queensland Takeaway food services",
+       subtitle = "Series ID: A3349767W",
+       y = "Turnover")
+```
+
+```{r warning=F, message=F}
+gg_season(myseries, Turnover) +
+  labs(title = "Turnover in Queensland Takeaway food services",
+       subtitle = "Series ID: A3349767W",
+       y = "Turnover")
+```
+
+```{r warning=F, message=F}
+gg_subseries(myseries, Turnover) +
+  labs(title = "Turnover in Queensland Takeaway food services",
+       subtitle = "Series ID: A3349767W",
+       y = "Turnover")
+```
+
+```{r warning=F, message=F}
+gg_lag(myseries, geom ="point") +
+  labs(x = "lag(Turnover, k)")
+```
+
+```{r warning=F, message=F}
+myseries %>% ACF(Turnover) %>% autoplot()
+```
 
 Can you spot any seasonality, cyclicity and trend? What do you learn about the series?
 
