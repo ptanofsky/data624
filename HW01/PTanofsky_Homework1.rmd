@@ -1,7 +1,7 @@
 ---
 title: "DATA 624 Homework 1"
 author: "Philip Tanofsky"
-date: "9/6/2021"
+date: "9/12/2021"
 output: html_document
 ---
 
@@ -38,23 +38,24 @@ Use autoplot() to plot some of the series in these data sets.
 
 ```{r warning=F, message=F}
 autoplot(gafa_stock, Close) +
-  labs(title = "Closing price of the stock",
+  labs(title = "Closing Stock Price",
        subtitle = "Google, Amazon, Facebook, Apple",
        y = "Price")
 
 pbs_a10 <- PBS %>%
   filter(ATC2 == "A10" & Concession == "Concessional" & Type == "Co-payments") %>%
+  mutate(Cost = Cost/1e6) %>%
   select(Month, Cost)
 
 autoplot(pbs_a10, Cost) +
-  labs(title = "Total number of scripts",
-       subtitle = "Monthly Medicare Australia prescription data",
-       y = "Count")
+  labs(title = "Total cost of Medicare Australia prescriptions by Month",
+       subtitle = "Data defined as ATC2 is A10, Concessional and Co-payments",
+       y = "Cost in millions")
 
 autoplot(vic_elec, Demand) +
   labs(title = "Electricity Demand",
        subtitle = "Victoria, Australia",
-       y = "MW")
+       y = "Megawatts")
 
 autoplot(pelt, Hare) +
   labs(title = "Trading records of furs from 1845 to 1935",
@@ -64,15 +65,15 @@ autoplot(pelt, Hare) +
 
 ### B.
 
-What is the time interval of each series?
+#### What is the time interval of each series?
 
-gafa_stock: One day, excluding days the stock market is closed
+**gafa_stock:** One day, excluding days the stock market is closed (time interval of [!] indicates irregularity)
 
-PBS: One month
+**PBS:** One month
 
-vic_elect: 30 minutes
+**vic_elec:** 30 minutes
 
-pelt: One year
+**pelt:** One year
 
 ## Exercise 2.2
 
@@ -91,7 +92,7 @@ result
 
 Download the file `tute1.csv` from the book website, open it in Excel (or some other spreadsheet application), and review its contents. You should find four columns of information. Columns B through D each contain a quarterly series, labelled Sales, AdBudget and GDP. Sales contains the quarterly sales for a small company over the period 1981-2005. AdBudget is the advertising budget and GDP is the gross domestic product. All series have been adjusted for inflation.
 
-### A. 
+### A.
 
 You can read the data into R with the following script:
 
@@ -100,7 +101,9 @@ tute1 <- readr::read_csv("tute1.csv")
 View(tute1)
 ```
 
-### B. Convert the data to time series
+### B.
+
+Convert the data to time series
 
 ```{r warning=F, message=F}
 mytimeseries <- tute1 %>%
@@ -110,7 +113,9 @@ mytimeseries <- tute1 %>%
 head(mytimeseries)
 ```
 
-### C. Construct time series plots of each of the three series
+### C.
+
+Construct time series plots of each of the three series
 
 ```{r warning=F, message=F}
 mytimeseries %>%
@@ -175,17 +180,10 @@ ne_ts <- ts %>%
 head(ne_ts)
 
 autoplot(ne_ts, y) +
-  labs(title = "xxx",
-       subtitle = "xxx",
-       y = "xxx")
+  labs(title = "Annual natural gas consumption by state",
+       subtitle = "New England area",
+       y = "Consumption in thousands")
 ```
-
-ne_ts %>%
-  pivot_longer(-year) %>%
-  ggplot(aes(x = year, y = value, colour = name)) +
-  geom_line() +
-  facet_grid(name ~ ., scales = "free_y")
-
 
 ## Exercise 2.5
 
@@ -265,10 +263,6 @@ myseries <- aus_retail %>%
 head(myseries)
 
 dim(myseries)
-
-unique(myseries$State)
-
-unique(myseries$Industry)
 ```
 
 Explore your chosen retail time series using the following functions:
@@ -282,12 +276,16 @@ autoplot(myseries, Turnover) +
        y = "Turnover")
 ```
 
+`autoplot()` indicates a increasing trend.
+
 ```{r warning=F, message=F}
 gg_season(myseries, Turnover) +
   labs(title = "Turnover in Queensland Takeaway food services",
        subtitle = "Series ID: A3349767W",
        y = "Turnover")
 ```
+
+`gg_season()` indicates a seasonal pattern particularly in the more recent years.
 
 ```{r warning=F, message=F}
 gg_subseries(myseries, Turnover) +
@@ -296,10 +294,14 @@ gg_subseries(myseries, Turnover) +
        y = "Turnover")
 ```
 
+`gg_subseries()` reiterates the finding from `gg_season()`. The blue average line represents the seasonal, yearly nature of the turnover.
+
 ```{r warning=F, message=F}
 gg_lag(myseries, geom ="point") +
   labs(x = "lag(Turnover, k)")
 ```
+
+I'll admit the `gg_lag()` is not telling me much besides a strongly positive relationship. My impression is that the graph is speaking more to the overall increase of turnover.
 
 ```{r warning=F, message=F}
 myseries %>% ACF(Turnover) %>% autoplot()
@@ -307,11 +309,6 @@ myseries %>% ACF(Turnover) %>% autoplot()
 
 Can you spot any seasonality, cyclicity and trend? What do you learn about the series?
 
+I would say an increasing trend is present in the data and the data does follow a seasonal pattern over the course of a given year. The `ACF()` graph almost captures the scallop graphical pattern as identified in the textbook, but not quite. Given the step-down pattern present after lag 12, 24, I do define this data as seasonal on a yearly basis. I would not say a cyclic nature exists for the data.
 
-
-
-```{r warning=F, message=F}
-
-```
-
-
+In wanting to say Yes to a cyclic nature, perhaps an argument could be made for a general 7-year stock-market cycle starting in 1998 through 2014, but I think that's a stretch. I'm not an expert on the Australian economy, but if the Australian economy follows the US economy based on global impacts, then I could believe the dot com bust of late 90s and the 2008 subprime mortgage market crash are being reflected here. But I wouldn't say that's a cycle. I wouldn't say this data captures a true stock-market cycle given the data provided.
