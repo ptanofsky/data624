@@ -1,0 +1,61 @@
+---
+title: "DATA 624 Assignment 2"
+author: "Philip Tanofsky"
+date: "9/19/2021"
+output: html_document
+---
+
+
+ 
+# Exercise 3.1
+
+Consider the GDP information in `global_economy`. Plot the GDP per capita for each country over time. Which country has the highest GDP per capita? How has this change over time?
+
+# Exercise 3.2
+
+For each of the following series, make a graph of the data. If transforming seems appropriate, do so and describe the effect.
+
+## A
+
+United States GDP from `global_economy`
+
+## B
+
+Slaughter of Victorian "Bulls, bullocks and steers" in `aus_livestock`.
+
+## C
+
+Victorian Electricity Demand from `vic_elec`.
+
+## D
+
+Gas production from `aus_production`.
+
+# Exercise 3.3
+
+Why is a Box-Cox transformation unhelpful for the `canadian_gas` data?
+
+# Exercise 3.4
+
+What Box-Cox transformation would you select for your retail data (from Exercise 8 in Section 2.10)?
+
+# Exercise 3.5
+
+For the following series, find an appropriate Box-Cox transformation in order to stabilise the variance. Tobacco from `aus_production`, Economy class passengers between Melbourne and Sydney from `ansett`, and Pedestrian counts at Southern Cross Station from `pedestrian`.
+
+## A - aus_production
+
+## B - ansett
+
+## C - pedestrian
+
+# Exercise 3.7
+
+# Exercise 3.8
+
+# Exercise 3.9
+
+
+
+
+
