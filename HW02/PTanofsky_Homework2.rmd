@@ -1,7 +1,8 @@
 ---
 title: "DATA 624 Assignment 2"
+subtitle: "Fall 2021"
 author: "Philip Tanofsky"
-date: "9/19/2021"
+date: "`r format(Sys.time(), '%d %B %Y')`"
 output: html_document
 ---
 
@@ -19,6 +20,11 @@ Consider the GDP information in `global_economy`. Plot the GDP per capita for ea
 global_economy %>%
   autoplot(GDP/Population, show.legend=FALSE) +
   labs(title= "GDP per capita", y = "$US")
+
+global_economy %>%
+  filter(Year == "2017") %>%
+  mutate(GdpPerPop = GDP/Population) %>%
+  arrange(desc(GdpPerPop))
 ```
 
 # Exercise 3.2
@@ -44,34 +50,65 @@ Population adjustment
 Slaughter of Victorian "Bulls, bullocks and steers" in `aus_livestock`.
 
 ```{r warning=F, message=F}
-
 aus_livestock %>%
   filter(Animal == "Bulls, bullocks and steers" &
            State == "Victoria") %>%
-  autoplot(Count) +
-  labs(title= "Bulls, bullocks and steers", y = "Count")
+  mutate(DailyAvgByMonth = Count / days_in_month(Month)) %>%
+  autoplot(DailyAvgByMonth) +
+  labs(title= "Slaughter of Victorian Bulls, bullocks and steers", y = "Daily Average by Month")
+
+# Help from: https://stackoverflow.com/questions/30037722/daily-average-to-monthly-total-in-r
 ```
+Apply calendar adjustment with `days_in_month` from lubridate library.
 
 ## C
 
 Victorian Electricity Demand from `vic_elec`.
 
 ```{r warning=F, message=F}
+victs <- vic_elec %>%
+  index_by(Date) %>%
+  ungroup() %>%
+  select(-c(Time)) %>%
+  as_tsibble(index=Date, key=Demand)
 
-vic_elec %>%
-  autoplot(Demand) +
-  labs(title= "Electricity Demand", y = "MW")
+
+head(vic_elec)
+
+head(victs)
+#  as_tsibble(index = Date, key = Temperature) %>%
+#  autoplot(DailyTotal) +
+#  labs(title= "Electricity Demand", y = "Daily Total (in MW)")
 ```
+
+  group_by(Date) %>%
+  summarise(DailyTotal = sum(Demand)) %>%
+  mutate(Quarter = yearquarter(Quarter)) %>%
+  as_tsibble(index = Date, key = DailyTotal)
+Calendar adjustment, to track by day instead of per 30-minute intervals
+
+
 
 ## D
 
 Gas production from `aus_production`.
 
 ```{r warning=F, message=F}
-
+# From section 3.1
+lambda <- aus_production %>%
+  features(Gas, features = guerrero) %>%
+  pull(lambda_guerrero)
 aus_production %>%
-  autoplot(Gas) +
-  labs(title= "Gas Production", y = "Petajoule")
+  autoplot(box_cox(Gas, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed gas production with $\\lambda$ = ",
+         round(lambda,2))))
+
+
+#aus_production %>%
+#  autoplot(Gas) +
+#  labs(title= "Gas Production", y = "Petajoule")
 ```
 Box-Cox (mathematical transformation)
 
@@ -85,7 +122,19 @@ Why is a Box-Cox transformation unhelpful for the `canadian_gas` data?
 canadian_gas %>%
   autoplot(Volume) +
   labs(title= "Monthly Canadian Gas Production", y = "Billions of cubic meters")
+
+lambda <- canadian_gas %>%
+  features(Volume, features = guerrero) %>%
+  pull(lambda_guerrero)
+canadian_gas %>%
+  autoplot(box_cox(Volume, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed gas production with $\\lambda$ = ",
+         round(lambda,2))))
 ```
+The Box-Cox transformations is unhelpful for `canadian_gas` because the seasonal variation is already about the same across the whole series. As seen above in the initial plot without transformation and the second plot with a Box-Cox transformation, the transformation doesn't necessarily tease out the season variation. If anything, the transformation diminishes the impact of the large seasonal swings between 1978 through 1990.
+
 
 # Exercise 3.4
 
@@ -97,9 +146,20 @@ set.seed(8675309)
 myseries <- aus_retail %>%
   filter(`Series ID` == sample(aus_retail$`Series ID`,1))
 
-head(myseries)
+autoplot(myseries, Turnover) +
+  labs(title = "Turnover in Queensland Takeaway food services",
+       subtitle = "Series ID: A3349767W",
+       y = "Turnover")
 
-dim(myseries)
+lambda <- myseries %>%
+  features(Turnover, features = guerrero) %>%
+  pull(lambda_guerrero)
+myseries %>%
+  autoplot(box_cox(Turnover, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed food services turnover with $\\lambda$ = ",
+         round(lambda,2))))
 ```
 
 # Exercise 3.5
@@ -109,19 +169,54 @@ For the following series, find an appropriate Box-Cox transformation in order to
 ## A - aus_production
 
 ```{r warning=F, message=F}
-
+# Tobacco
+lambda <- aus_production %>%
+  features(Tobacco, features = guerrero) %>%
+  pull(lambda_guerrero)
+aus_production %>%
+  autoplot(box_cox(Tobacco, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed tobacco production with $\\lambda$ = ",
+         round(lambda,2))))
 ```
 
 ## B - ansett
 
 ```{r warning=F, message=F}
+# Economy class passengers between Melbourne and Sydney
+lambda <- ansett %>%
+  filter(Airports == 'MEL-SYD' &
+           Class == 'Economy') %>%
+  features(Passengers, features = guerrero) %>%
+  pull(lambda_guerrero)
 
+ansett %>%
+  filter(Airports == 'MEL-SYD' &
+           Class == 'Economy') %>%
+  autoplot(box_cox(Passengers, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed economy passengers between Mel and Syd with $\\lambda$ = ",
+         round(lambda,2))))
 ```
 
 ## C - pedestrian
 
 ```{r warning=F, message=F}
+# Pedestrian counts at Southern Cross Station
+lambda <- pedestrian %>%
+  filter(Sensor == 'Southern Cross Station') %>%
+  features(Count, features = guerrero) %>%
+  pull(lambda_guerrero)
 
+pedestrian %>%
+  filter(Sensor == 'Southern Cross Station') %>%
+  autoplot(box_cox(Count, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed pedestrian count at Southern Cross Station with $\\lambda$ = ",
+         round(lambda,2))))
 ```
 
 # Exercise 3.7
@@ -130,27 +225,147 @@ Consider the last five years of the Gas data from `aus_production`.
 
 ```{r warning=F, message=F}
 gas <- tail(aus_production, 5*4) %>% select(Gas)
+
+head(gas)
 ```
 
 ## A
 
 Plot the time series. Can you identify seasonal fluctuations and/or a trend-cycle?
 
+```{r warning=F, message=F}
+gas %>%
+  autoplot(Gas)
+```
+
+Trend-cycle shows an increase over the past five years. And the seasonal variance shows lows in Q1 and highs in Q3.
+
 ## B
 
 Use `classical_decomposition` with `type=multiplicative` to calculate the trend-cycle and seasonal indices.
 
+```{r warning=F, message=F}
+# From section 3.4
+dc <- gas %>%
+  model(classical_decomposition(Gas, type = "multiplicative")) %>%
+  components() 
+
+dc %>%
+  autoplot() +
+  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
+
+```
+
 ## C
 
-Do the results support the graphical interpretation from part a?
+Do the results support the graphical interpretation from part A?
+
+Yes, the trend line shows an increase from left to right with a plateau in the middle. The seasonal indices shows an almost perfect seasonal variance over the five-year window.
 
 ## D
 
 Compute and plot the seasonally adjusted data.
 
+```{r warning=F, message=F}
+dc %>%
+  ggplot(aes(x = Quarter)) +
+  geom_line(aes(y = Gas, colour = "Data")) +
+  geom_line(aes(y = season_adjust,
+                colour = "Seasonally Adjusted")) +
+  geom_line(aes(y = trend, colour = "Trend")) +
+  labs(y = "Petajoules",
+       title = "Gas production in Australia") +
+  scale_colour_manual(
+    values = c("gray", "#0072B2", "#D55E00"),
+    breaks = c("Data", "Seasonally Adjusted", "Trend")
+  )
+```
+
 ## E
 
 Change one observation to be an outlier (e.g., add 300 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?
+
+```{r warning=F, message=F}
+# Outlier in beginning
+
+gas_OutFront <- gas
+gas_OutFront$Gas[1] <- gas_OutFront$Gas[1] + 300
+
+of_dc <- gas_OutFront %>%
+  model(classical_decomposition(Gas, type = "multiplicative")) %>%
+  components()
+
+of_dc %>%
+  autoplot() +
+  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
+
+of_dc %>%
+  ggplot(aes(x = Quarter)) +
+  geom_line(aes(y = Gas, colour = "Data")) +
+  geom_line(aes(y = season_adjust,
+                colour = "Seasonally Adjusted")) +
+  geom_line(aes(y = trend, colour = "Trend")) +
+  labs(y = "Petajoules",
+       title = "Gas production in Australia") +
+  scale_colour_manual(
+    values = c("gray", "#0072B2", "#D55E00"),
+    breaks = c("Data", "Seasonally Adjusted", "Trend")
+  )
+```
+
+```{r warning=F, message=F}
+# Outlier in middle
+gas_OutMid <- gas
+gas_OutMid$Gas[11] <- gas_OutMid$Gas[11] + 300
+
+om_dc <- gas_OutMid %>%
+  model(classical_decomposition(Gas, type = "multiplicative")) %>%
+  components()
+
+om_dc %>%
+  autoplot() +
+  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
+
+om_dc %>%
+  ggplot(aes(x = Quarter)) +
+  geom_line(aes(y = Gas, colour = "Data")) +
+  geom_line(aes(y = season_adjust,
+                colour = "Seasonally Adjusted")) +
+  geom_line(aes(y = trend, colour = "Trend")) +
+  labs(y = "Petajoules",
+       title = "Gas production in Australia") +
+  scale_colour_manual(
+    values = c("gray", "#0072B2", "#D55E00"),
+    breaks = c("Data", "Seasonally Adjusted", "Trend")
+  )
+```
+
+```{r warning=F, message=F}
+# Outlier in back
+gas_OutBack <- gas
+gas_OutBack$Gas[20] <- gas_OutBack$Gas[20] + 300
+
+ob_dc <- gas_OutBack %>%
+  model(classical_decomposition(Gas, type = "multiplicative")) %>%
+  components()
+
+ob_dc %>%
+  autoplot() +
+  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
+
+ob_dc %>%
+  ggplot(aes(x = Quarter)) +
+  geom_line(aes(y = Gas, colour = "Data")) +
+  geom_line(aes(y = season_adjust,
+                colour = "Seasonally Adjusted")) +
+  geom_line(aes(y = trend, colour = "Trend")) +
+  labs(y = "Petajoules",
+       title = "Gas production in Australia") +
+  scale_colour_manual(
+    values = c("gray", "#0072B2", "#D55E00"),
+    breaks = c("Data", "Seasonally Adjusted", "Trend")
+  )
+```
 
 ## F
 
@@ -159,6 +374,24 @@ Does it make any difference if the outlier is near the end rather than in the mi
 # Exercise 3.8
 
 Recall your retail time series data (from Exercise 8 in Section 2.10). Decompose the series using X-11. Does it reveal any outliers, or unusual features that you had not noticed previously?
+
+```{r warning=F, message=F}
+library(seasonal)
+set.seed(8675309)
+
+myseries <- aus_retail %>%
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+
+x11_dcmp <- myseries %>%
+  model(x11 = X_13ARIMA_SEATS(Turnover ~ x11())) %>%
+  components()
+
+autoplot(x11_dcmp) +
+  labs(title =
+    "Decomposition of Turnover in Queensland Takeaway food services using X-11.")
+```
+
+Yes, the seasonal variance flips over time, and there are a few outliers as identified from the "irregular" chart.
 
 # Exercise 3.9
 
