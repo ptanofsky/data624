@@ -16,16 +16,30 @@ library(fpp3)
 Consider the GDP information in `global_economy`. Plot the GDP per capita for each country over time. Which country has the highest GDP per capita? How has this changed over time?
 
 ```{r warning=F, message=F}
-
 global_economy %>%
   autoplot(GDP/Population, show.legend=FALSE) +
   labs(title= "GDP per capita", y = "$US")
+```
 
+The plot above shows all the GDP per capita data from `global_economy` without the legend. In general the trend is increasing, but that doesn't take into account inflation.
+
+```{r warning=F, message=F}
 global_economy %>%
   filter(Year == "2017") %>%
   mutate(GdpPerPop = GDP/Population) %>%
   arrange(desc(GdpPerPop))
 ```
+
+Luxembourg has the highest GDP per capita for 2017 the final year of `global_economy`.
+
+```{r warning=F, message=F}
+global_economy %>%
+  filter(Year == "2014") %>%
+  mutate(GdpPerPop = GDP/Population) %>%
+  arrange(desc(GdpPerPop))
+```
+
+There is something peculiar about this data, though. Monaco and Liechtenstein don't appear to have any data listed for 2017, but those two countries have the highest GDP per capita starting around 1985. Of all data points in the plot, Monaco has the highest GDP per capita with 185152.5272 in 2014. It would appear that since 1970, Monaco has the highest GDP per capita every year save for 3 exceptions.
 
 # Exercise 3.2
 
@@ -43,7 +57,7 @@ global_economy %>%
   labs(title= "GDP per capita", y = "$US")
 ```
 
-Population adjustment
+Applied population adjustment to account for the effect of the population total on the United Stated GDP, thus giving the GDP a more honest value for each year.
 
 ## B
 
@@ -59,35 +73,35 @@ aus_livestock %>%
 
 # Help from: https://stackoverflow.com/questions/30037722/daily-average-to-monthly-total-in-r
 ```
-Apply calendar adjustment with `days_in_month` from lubridate library.
+
+Applied calendar adjustment with `days_in_month` from lubridate library in order to calculate the daily average for each month instead of the raw monthly totals. This adjustment accounts for the differing number of days in each month.
 
 ## C
 
 Victorian Electricity Demand from `vic_elec`.
 
 ```{r warning=F, message=F}
-victs <- vic_elec %>%
-  index_by(Date) %>%
-  ungroup() %>%
-  select(-c(Time)) %>%
-  as_tsibble(index=Date, key=Demand)
+# Convert to tibble from tsibble and drop time
+vc_tib <- as_tibble(vic_elec) %>% 
+  select(-c(Time))
 
-
-head(vic_elec)
-
-head(victs)
-#  as_tsibble(index = Date, key = Temperature) %>%
-#  autoplot(DailyTotal) +
-#  labs(title= "Electricity Demand", y = "Daily Total (in MW)")
-```
-
+# Convert back to tsibble grouping and summing Total Daily Demand by date
+vc_tsib <- vc_tib %>%
   group_by(Date) %>%
   summarise(DailyTotal = sum(Demand)) %>%
-  mutate(Quarter = yearquarter(Quarter)) %>%
+  mutate(Date = as_date(Date)) %>%
   as_tsibble(index = Date, key = DailyTotal)
-Calendar adjustment, to track by day instead of per 30-minute intervals
 
+# Plot new tsibble, Daily Total Demand by Date
+vc_tsib %>%
+  ggplot(aes(x = Date, y = DailyTotal)) +
+  geom_line() +
+  labs(title = "Electricity Demand",
+       subtitle = "Victoria, Australia",
+       y = "Daily Total (in megawatts)")
+```
 
+Applied a calendar adjustment by summing the daily demand totals for each date instead of using the default 30-minute intervals. With so many intervals plotted on one chart, I couldn't make sense of the data, and given the small increments, the plot was a daily cycle over three years ... just not working for me. In order to provide a more contextualized view, I summed all the increments for a given day, and thus plotted the total daily demand over the course of three years. I believe this plot gives a better view of the seasonal changes in electricity demand and also an outlier in early 2014. I would suspect some sort of freak weather event occurred in Victoria, Australia at that time.
 
 ## D
 
@@ -104,13 +118,9 @@ aus_production %>%
        title = latex2exp::TeX(paste0(
          "Transformed gas production with $\\lambda$ = ",
          round(lambda,2))))
-
-
-#aus_production %>%
-#  autoplot(Gas) +
-#  labs(title= "Gas Production", y = "Petajoule")
 ```
-Box-Cox (mathematical transformation)
+
+Applied Box-Cox transformation (mathematical transformation) following the example in section 3.1 of the Hyndman textbook. The transformation evens out the seasonal variation across the whole series.
 
 
 # Exercise 3.3
@@ -133,8 +143,8 @@ canadian_gas %>%
          "Transformed gas production with $\\lambda$ = ",
          round(lambda,2))))
 ```
-The Box-Cox transformations is unhelpful for `canadian_gas` because the seasonal variation is already about the same across the whole series. As seen above in the initial plot without transformation and the second plot with a Box-Cox transformation, the transformation doesn't necessarily tease out the season variation. If anything, the transformation diminishes the impact of the large seasonal swings between 1978 through 1990.
 
+The Box-Cox transformations is unhelpful for `canadian_gas` because the seasonal variation is already about the same across the whole series except for the years 1978-1990 in which the seasonal variation increases. As seen above in the initial plot without transformation and the second plot with a Box-Cox transformation, the transformation doesn't necessarily tease out the season variation. If anything, the transformation diminishes the impact of the large seasonal swings between 1978 through 1990.
 
 # Exercise 3.4
 
@@ -150,7 +160,11 @@ autoplot(myseries, Turnover) +
   labs(title = "Turnover in Queensland Takeaway food services",
        subtitle = "Series ID: A3349767W",
        y = "Turnover")
+```
 
+Initial plot above.
+
+```{r warning=F, message=F}
 lambda <- myseries %>%
   features(Turnover, features = guerrero) %>%
   pull(lambda_guerrero)
@@ -161,6 +175,8 @@ myseries %>%
          "Transformed food services turnover with $\\lambda$ = ",
          round(lambda,2))))
 ```
+
+Using the `guerrero` feature, as following the textbook's example, then the recommended lambda value is 0.24, which indicates a power transformation is used. As seen in the above plot (with transformation applied), the seasonal variance is much more even across the whole series.
 
 # Exercise 3.5
 
@@ -219,6 +235,24 @@ pedestrian %>%
          round(lambda,2))))
 ```
 
+To be honest, I wasn't real pleased with the above result. Given the data represents hourly counts over the course of two years, I figured the seasonal nature would follow a weekly pattern. Also, I noticed a clear decrease at the end of 2015, which I wasn't sure was related to holidays or some other one-off event in Australia. Given these observations, I calculated lambda using the guerrero feature with only data from 2015 before December (code below), thus avoiding the noticeable decrease, and the lambda result was the same: -0.23. With the same result using this abbreviated dataset, I will go with the initial result of lambda equal to -0.23 as calculated on the whole series.
+
+```{r warning=F, message=F, eval=F}
+lambda <- pedestrian %>%
+  filter(Sensor == 'Southern Cross Station' &
+           Date < '2015-12-01') %>%
+  features(Count, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+pedestrian %>%
+  filter(Sensor == 'Southern Cross Station') %>%
+  autoplot(box_cox(Count, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed pedestrian count at Southern Cross Station with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
 # Exercise 3.7
 
 Consider the last five years of the Gas data from `aus_production`.
@@ -260,7 +294,7 @@ dc %>%
 
 Do the results support the graphical interpretation from part A?
 
-Yes, the trend line shows an increase from left to right with a plateau in the middle. The seasonal indices shows an almost perfect seasonal variance over the five-year window.
+Yes, the trend line shows an increase from left to right with a near constant in the middle. The seasonal indices shows an almost perfect seasonal variance over the five-year window.
 
 ## D
 
@@ -284,6 +318,8 @@ dc %>%
 ## E
 
 Change one observation to be an outlier (e.g., add 300 to one observation), and recompute the seasonally adjusted data. What is the effect of the outlier?
+
+### Outlier in the beginning
 
 ```{r warning=F, message=F}
 # Outlier in beginning
@@ -313,6 +349,8 @@ of_dc %>%
   )
 ```
 
+### Outlier in the middle
+
 ```{r warning=F, message=F}
 # Outlier in middle
 gas_OutMid <- gas
@@ -339,6 +377,8 @@ om_dc %>%
     breaks = c("Data", "Seasonally Adjusted", "Trend")
   )
 ```
+
+### Outlier in the end
 
 ```{r warning=F, message=F}
 # Outlier in back
@@ -371,6 +411,8 @@ ob_dc %>%
 
 Does it make any difference if the outlier is near the end rather than in the middle of the time series?
 
+Yes, based on the plots above, the first outlier at the beginning, clearly shows an anomaly at the beginning of the seasonally adjusted plot, but otherwise, the rest of the seasonally adjusted plot matches that of the original plot. Same for the outlier at the end, except now the anomaly appears at the end, otherwise, the seasonally adjusted plot nearly matches the original seasonally adjusted plot. In the case of the outlier in the middle, the seasonally adjusted plot more closely follows the data line itself, almost replicated the seasonal nature of the data. The outlier in the middle, at least in the example, appears to discredit the value of the seasonally adjusted calculations and plot.
+
 # Exercise 3.8
 
 Recall your retail time series data (from Exercise 8 in Section 2.10). Decompose the series using X-11. Does it reveal any outliers, or unusual features that you had not noticed previously?
@@ -391,7 +433,7 @@ autoplot(x11_dcmp) +
     "Decomposition of Turnover in Queensland Takeaway food services using X-11.")
 ```
 
-Yes, the seasonal variance flips over time, and there are a few outliers as identified from the "irregular" chart.
+Yes, the seasonal variance flips over time. The seasonal chart shows spikes of increased turnover whereas later in the plot, the spikes are for the lower turnover values. The plot indicates a few outliers as identified from the "irregular" chart. Overall, the trend plot does not uncover any unusual aspect of the data.
 
 # Exercise 3.9
 
@@ -401,16 +443,10 @@ Figures 3.19 and 3.20 show the result of decomposing the number of persons in th
 
 Write about 3–5 sentences describing the results of the decomposition. Pay particular attention to the scales of the graphs in making your interpretation.
 
+The results of the decomposition does show a trend line that does closely represent the true plot of the data. The interesting aspect of the decomposition is found in the scales of the season_year and the remainder decompositions. Still being a novice, but I would normally expect the season_year chart to have a smaller gray bar and thus play a larger factor in the data, whereas the decomposition in 3.19 indicates the remainder chart impacts the data to a larger degree than the season_year data. The impact of the remainder plot would appear due to the recession of 1991/92, as that downward turn so impacted the data, that the season_year data couldn't account for the decrease. The sub-seasonal chart (3.20) does appear to show large changes over time in the months of March, July, August, November and December. 
+
 ## B
 
 Is the recession of 1991/1992 visible in the estimated components?
 
-
-
-
-
-
-```{r warning=F, message=F}
-
-```
-
+Yes, as noted in the answer to section A, the remainder component shows very clear outlier data in 1991 and 1992, which actually give the remainder decomposition more impact than the season_year decomposition based on the scales. The overall data and the trend, show a slight decrease in these years, but the remainder chart shows the drastic decrease during this timeframe.

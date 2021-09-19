@@ -1,0 +1,49 @@
+---
+title: "DATA 624 HW 2 vic_elec"
+author: "Philip Tanofsky"
+date: "9/19/2021"
+output: html_document
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(fpp3)
+```
+
+```{r warning=F, message=F, eval=F}
+# Convert to tibble from tsibble and drop time
+vc_tib <- as_tibble(vic_elec) %>% 
+  select(-c(Time))
+
+# Convert back to tsibble grouping and summing Demand by date
+vc_tsib <- vc_tib %>%
+  group_by(Date) %>%
+  summarise(DailyTotal = sum(Demand)) %>%
+  mutate(Date = as_date(Date)) %>%
+  as_tsibble(index = Date, key = DailyTotal)
+
+# Plot new tsibble, Daily Total Demand by Date
+vc_tsib %>%
+  ggplot(aes(x = Date, y = DailyTotal)) +
+  geom_line() +
+  labs(title = "Electricity Demand",
+       subtitle = "Victoria, Australia",
+       y = "Daily Total (in megawatts)")
+```
+
+```{r warning=F, message=F, eval=F}
+lambda <- pedestrian %>%
+  filter(Sensor == 'Southern Cross Station' &
+           Date < '2015-12-01') %>%
+  features(Count, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+pedestrian %>%
+  filter(Sensor == 'Southern Cross Station') %>%
+  autoplot(box_cox(Count, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed pedestrian count at Southern Cross Station with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
