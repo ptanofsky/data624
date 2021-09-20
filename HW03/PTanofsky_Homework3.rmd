@@ -1,0 +1,199 @@
+---
+title: "DATA 624 Assignment 3"
+subtitle: "CUNY Fall 2021"
+author: "Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(fpp3)
+```
+
+# Exercise 5.1
+
+Produce forecasts for the following series using whichever of `NAIVE(y)`, `SNAIVE(y)` or `RW(y ~ drift())` is more appropriate in each case:
+
+### Australian Population (global_economy)
+
+```{r warning=F, message=F}
+
+```
+
+### Bricks (aus_production)
+
+```{r warning=F, message=F}
+
+```
+
+### NSW Lambs (aus_livestock)
+
+```{r warning=F, message=F}
+
+```
+
+### Household wealth (hh_budget).
+
+```{r warning=F, message=F}
+
+```
+
+### Australian takeaway food turnover (aus_retail).
+
+```{r warning=F, message=F}
+
+```
+
+# Exercise 5.2
+
+Use the Facebook stock price (data set `gafa_stock`) to do the following:
+
+### A
+
+Produce a time plot of the series.
+
+```{r warning=F, message=F}
+
+```
+
+### B
+
+Produce forecasts using the drift method and plot them.
+
+```{r warning=F, message=F}
+
+```
+
+### C
+
+Show that the forecasts are identical to extending the line drawn between the first and last observations.
+
+```{r warning=F, message=F}
+
+```
+
+### D
+
+Try using some of the other benchmark functions to forecast the same data set. Which do you think is best? Why?
+
+```{r warning=F, message=F}
+
+```
+
+# Exercise 5.3
+
+Apply a seasonal naïve method to the quarterly Australian beer production data from 1992. Check if the residuals look like white noise, and plot the forecasts. The following code will help.
+
+```{r warning=F, message=F}
+# Extract data of interest
+recent_production <- aus_production %>%
+  filter(year(Quarter) >= 1992)
+# Define and estimate a model
+fit <- recent_production %>% model(SNAIVE(Beer))
+# Look at the residuals
+fit %>% gg_tsresiduals()
+# Look a some forecasts
+fit %>% forecast() %>% autoplot(recent_production)
+```
+
+What do you conclude?
+
+# Exercise 5.4
+
+Repeat the previous exercise using the Australian Exports series from `global_economy` and the Bricks series from `aus_production`. Use whichever of `NAIVE()` or `SNAIVE()` is more appropriate in each case.
+
+### Australian Exports
+
+```{r warning=F, message=F}
+
+```
+
+### Bricks
+
+```{r warning=F, message=F}
+
+```
+
+# Exercise 5.7
+
+For your retail time series (from Exercise 8 in Section 2.10):
+
+```{r warning=F, message=F}
+set.seed(8675309)
+myseries <- aus_retail %>%
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+```
+
+## A
+
+Create a training dataset consisting of observations before 2011 using
+
+```{r warning=F, message=F}
+myseries_train <- myseries %>%
+  filter(year(Month) < 2011)
+```
+
+## B
+
+Check that your data have been split appropriately by producing the following plot.
+
+```{r warning=F, message=F}
+autoplot(myseries, Turnover) +
+  autolayer(myseries_train, Turnover, colour = "red")
+```
+
+## C
+
+Fit a seasonal naïve model using `SNAIVE()` applied to your training data (`myseries_train`).
+
+```{r warning=F, message=F}
+fit <- myseries_train %>%
+  model(SNAIVE())
+```
+
+## D
+
+Check the residuals.
+
+```{r warning=F, message=F}
+fit %>% gg_tsresiduals()
+```
+
+Do the residuals appear to be uncorrelated and normally distributed?
+
+## E
+
+Produce forecasts for the test data
+
+```{r warning=F, message=F}
+fc <- fit %>%
+  forecast(new_data = anti_join(myseries, myseries_train))
+fc %>% autoplot(myseries)
+```
+
+## F
+
+Compare the accuracy of your forecasts against the actual values.
+
+```{r warning=F, message=F}
+fit %>% accuracy()
+fc %>% accuracy(myseries)
+```
+
+## G
+
+How sensitive are the accuracy measures to the amount of training data used?
+
+```{r warning=F, message=F}
+
+```
+
+
+
+
+
+
+```{r warning=F, message=F}
+
+```
