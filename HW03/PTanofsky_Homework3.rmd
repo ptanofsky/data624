@@ -146,7 +146,15 @@ hh_budget %>% autoplot(Wealth)
 ### Australian takeaway food turnover (aus_retail).
 
 ```{r warning=F, message=F}
+# 8 states
+aus_ta_to <- aus_retail %>%
+  filter(Industry == "Takeaway food services")
 
+# 1982 Apr
+# 2018 Dec
+# 3456 / 12 /8 = 36 years
+
+aus_ta_to %>% autoplot(Turnover)
 ```
 
 # Exercise 5.2
@@ -161,11 +169,14 @@ Produce a time plot of the series.
 fb_stock <- gafa_stock %>%
   filter(Symbol == 'FB')
 
-fb_stock %>% autoplot(Adj_Close) +
+fb_stock %>% autoplot(Close) +
   labs(
     y = "Price (in USD)",
-    title = "Adjusted Close Stock Price of Facebook"
+    title = "Closing Stock Price of Facebook"
   )
+
+# Tail shows the last day is 2018-12-31
+#tail(fb_stock)
 ```
 
 ### B
@@ -173,15 +184,49 @@ fb_stock %>% autoplot(Adj_Close) +
 Produce forecasts using the drift method and plot them.
 
 ```{r warning=F, message=F}
+# Re-index based on trading days
+fb_stock <- gafa_stock %>%
+  filter(Symbol == "FB") %>%
+  mutate(day = row_number()) %>%
+  update_tsibble(index = day, regular = TRUE)
 
+# Fit the models
+fb_fit <- fb_stock %>%
+  model(
+    `Naive Drift` = NAIVE(Close ~ drift()),
+    `Random Walk` = RW(Close ~ drift())
+  )
+
+# Produce forecasts for next 253 days (~1 year)
+fb_fc <- fb_fit %>% forecast(h = 253)
+
+# Plot the forecasts
+fb_fc %>%
+  autoplot(fb_stock, level = NULL) +
+  autolayer(fb_stock, Close, colour = "black") +
+  labs(y = "$US",
+       title = "Facebook daily closing stock prices",
+       subtitle = "SUBTITLE HERE") +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
+
+Naive Drift and Random Walk have the same line.
 
 ### C
 
 Show that the forecasts are identical to extending the line drawn between the first and last observations.
 
 ```{r warning=F, message=F}
-
+fb_fc %>%
+  autoplot(fb_stock, level = NULL) +
+  autolayer(fb_stock, Close, colour = "black") +
+  labs(y = "$US",
+       title = "Facebook daily closing stock prices",
+       subtitle = "SUBTITLE HERE") +
+  guides(colour = guide_legend(title = "Forecast")) +
+  geom_segment(aes(x=first(fb_stock$day), y=first(fb_stock$Close), 
+                   xend=last(fb_stock$day), yend=last(fb_stock$Close)),
+               linetype='dashed')
 ```
 
 ### D
@@ -189,7 +234,25 @@ Show that the forecasts are identical to extending the line drawn between the fi
 Try using some of the other benchmark functions to forecast the same data set. Which do you think is best? Why?
 
 ```{r warning=F, message=F}
+fb_fit_2 <- fb_stock %>%
+  model(
+    Mean = MEAN(Close),
+    Naive = NAIVE(Close),
+    `Seasonal naive` = SNAIVE(Close),
+    `Random Walk` = RW(Close)
+  )
 
+# Produce forecasts for next 253 days (~1 year)
+fb_fc_2 <- fb_fit_2 %>% forecast(h = 253)
+
+# Plot the forecasts
+fb_fc_2 %>%
+  autoplot(fb_stock, level = NULL) +
+  autolayer(fb_stock, Close, colour = "black") +
+  labs(y = "$US",
+       title = "Facebook daily closing stock prices",
+       subtitle = "SUBTITLE HERE") +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 # Exercise 5.3
@@ -204,7 +267,7 @@ recent_production <- aus_production %>%
 fit <- recent_production %>% model(SNAIVE(Beer))
 # Look at the residuals
 fit %>% gg_tsresiduals()
-# Look a some forecasts
+# Look at some forecasts
 fit %>% forecast() %>% autoplot(recent_production)
 ```
 
@@ -217,13 +280,36 @@ Repeat the previous exercise using the Australian Exports series from `global_ec
 ### Australian Exports
 
 ```{r warning=F, message=F}
+# Extract data of interest
+# 1960-2017 (57 years total)
+aus_exports <- global_economy %>%
+  filter(Country == 'Australia')
 
+# Define and estimate a model
+fit <- aus_exports %>% model(NAIVE(Exports))
+
+# Look at the residuals
+fit %>% gg_tsresiduals()
+
+# Look at some forecasts
+fit %>% forecast() %>% autoplot(aus_exports)
 ```
 
 ### Bricks
 
 ```{r warning=F, message=F}
+# 1956 Q1 to 2005 Q2 (198 quarters)
+aus_bricks <- aus_production %>%
+  select(c(Quarter, Bricks)) %>% na.omit(aus_bricks)
 
+# Define and estimate a model
+fit <- aus_bricks %>% model(SNAIVE(Bricks))
+
+# Look at the residuals
+fit %>% gg_tsresiduals()
+
+# Look at some forecasts
+fit %>% forecast() %>% autoplot(aus_bricks)
 ```
 
 # Exercise 5.7
@@ -258,16 +344,16 @@ autoplot(myseries, Turnover) +
 
 Fit a seasonal naïve model using `SNAIVE()` applied to your training data (`myseries_train`).
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 fit <- myseries_train %>%
-  model(SNAIVE())
+  model(SNAIVE(Turnover ~ drift()))
 ```
 
 ## D
 
 Check the residuals.
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 fit %>% gg_tsresiduals()
 ```
 
@@ -277,7 +363,7 @@ Do the residuals appear to be uncorrelated and normally distributed?
 
 Produce forecasts for the test data
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 fc <- fit %>%
   forecast(new_data = anti_join(myseries, myseries_train))
 fc %>% autoplot(myseries)
@@ -287,7 +373,7 @@ fc %>% autoplot(myseries)
 
 Compare the accuracy of your forecasts against the actual values.
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 fit %>% accuracy()
 fc %>% accuracy(myseries)
 ```
