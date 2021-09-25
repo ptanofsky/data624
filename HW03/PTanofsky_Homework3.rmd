@@ -15,28 +15,132 @@ library(fpp3)
 
 Produce forecasts for the following series using whichever of `NAIVE(y)`, `SNAIVE(y)` or `RW(y ~ drift())` is more appropriate in each case:
 
+- For naive forecasts, we simply set all forecasts to be the value of the last observation
+-- Because a naive forecast is optimal when data follow a random walk 
+
+- we set each forecast to be equal to the last observed value from the same season of the year
+
+- allow the forecasts to increase or decrease over time, where the amount of change over time (called the drift) is set to be the average change seen in the historical data. 
+
 ### Australian Population (global_economy)
 
 ```{r warning=F, message=F}
+# 1960-2017 (57 years total)
+aus_pop <- global_economy %>%
+  filter(Country == "Australia") %>%
+  mutate(Population = Population/1e6) %>%
+  select(c(Country, Code, Year, Population))
 
+# Set training data from 1960 to 2002 (43 years)
+train <- aus_pop %>%
+  filter_index("1960" ~ "2002")
+
+# Fit the models
+pop_fit <- train %>%
+  model(
+    Naive = NAIVE(Population),
+    `Seasonal naive` = SNAIVE(Population),
+    `Random walk` = RW(Population ~ drift())
+  )
+
+# Generate forecasts for 14 years
+pop_fc <- pop_fit %>% forecast(h = "14 years")
+
+# Plot forecasts against actual values
+pop_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(
+    filter_index(aus_pop, "2003" ~ "2017"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Population (in millions)",
+    title = "Forecasts for annual population in Australia"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 ### Bricks (aus_production)
 
-```{r warning=F, message=F}
+remove quarters at the tail of the `aus_production` tsibble without any data for Bricks
 
+```{r warning=F, message=F}
+# 1956 Q1 to 2005 Q2 (198 quarters)
+aus_bricks <- aus_production %>%
+  select(c(Quarter, Bricks)) %>% na.omit(aus_bricks)
+
+# Set training data from 1992 to 2006
+train <- aus_bricks %>%
+  filter_index("1956 Q1" ~ "1993 Q4")
+
+# Fit the models
+brick_fit <- train %>%
+  model(
+    `Naive` = NAIVE(Bricks),
+    `Seasonal naive` = SNAIVE(Bricks),
+    `Random walk` = RW(Bricks ~ drift())
+  )
+
+# Generate forecasts for 14 quarters
+brick_fc <- brick_fit %>% forecast(h = 46)
+
+# Plot forecasts against actual values
+brick_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(
+    filter_index(aus_bricks, "1994 Q1" ~ .),
+    colour = "black"
+  ) +
+  labs(
+    y = "Millions",
+    title = "Forecasts for quarterly brick production"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 ### NSW Lambs (aus_livestock)
 
 ```{r warning=F, message=F}
+# 1972 JUL to 2018 DEC (558 months)
+nsw_lambs <- aus_livestock %>%
+  filter(State == 'New South Wales' &
+           Animal == 'Lambs') %>%
+  mutate(Count = Count/1e3) %>%
+  select(c(Month, Count))
 
+# Set training data from 1972 through 2006
+train <- nsw_lambs %>%
+  filter_index("1972 JUL" ~ "2006 DEC")
+
+# Fit the models
+lamb_fit <- train %>%
+  model(
+    `Naive` = NAIVE(Count),
+    `Seasonal naive` = SNAIVE(Count),
+    `Random walk` = RW(Count ~ drift())
+  )
+
+# Generate forecasts for 144 months
+lamb_fc <- lamb_fit %>% forecast(h = 144)
+
+# Plot forecasts against actual values
+lamb_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(
+    filter_index(nsw_lambs, "2007 JAN" ~ .),
+    colour = "black"
+  ) +
+  labs(
+    y = "Thousands",
+    title = "Forecasts for lambs slaughtered in NSW"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 ### Household wealth (hh_budget).
 
 ```{r warning=F, message=F}
-
+hh_budget %>% autoplot(Wealth)
 ```
 
 ### Australian takeaway food turnover (aus_retail).
@@ -54,7 +158,14 @@ Use the Facebook stock price (data set `gafa_stock`) to do the following:
 Produce a time plot of the series.
 
 ```{r warning=F, message=F}
+fb_stock <- gafa_stock %>%
+  filter(Symbol == 'FB')
 
+fb_stock %>% autoplot(Adj_Close) +
+  labs(
+    y = "Price (in USD)",
+    title = "Adjusted Close Stock Price of Facebook"
+  )
 ```
 
 ### B
@@ -83,7 +194,7 @@ Try using some of the other benchmark functions to forecast the same data set. W
 
 # Exercise 5.3
 
-Apply a seasonal naïve method to the quarterly Australian beer production data from 1992. Check if the residuals look like white noise, and plot the forecasts. The following code will help.
+Apply a seasonal naive method to the quarterly Australian beer production data from 1992. Check if the residuals look like white noise, and plot the forecasts. The following code will help.
 
 ```{r warning=F, message=F}
 # Extract data of interest
@@ -147,7 +258,7 @@ autoplot(myseries, Turnover) +
 
 Fit a seasonal naïve model using `SNAIVE()` applied to your training data (`myseries_train`).
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 fit <- myseries_train %>%
   model(SNAIVE())
 ```
@@ -156,7 +267,7 @@ fit <- myseries_train %>%
 
 Check the residuals.
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 fit %>% gg_tsresiduals()
 ```
 
@@ -166,7 +277,7 @@ Do the residuals appear to be uncorrelated and normally distributed?
 
 Produce forecasts for the test data
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 fc <- fit %>%
   forecast(new_data = anti_join(myseries, myseries_train))
 fc %>% autoplot(myseries)
@@ -176,7 +287,7 @@ fc %>% autoplot(myseries)
 
 Compare the accuracy of your forecasts against the actual values.
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 fit %>% accuracy()
 fc %>% accuracy(myseries)
 ```
