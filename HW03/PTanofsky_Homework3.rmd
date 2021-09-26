@@ -140,21 +140,77 @@ lamb_fc %>%
 ### Household wealth (hh_budget).
 
 ```{r warning=F, message=F}
-hh_budget %>% autoplot(Wealth)
+# Wealth as a percentage of net disposable income.
+hh_wealth <- hh_budget %>%
+  select(c(Country, Year, Wealth))
+
+# 1995- 2016 (22 years)
+
+# Set training data from 1995 through 2010
+train <- hh_wealth %>%
+  filter_index("1995" ~ "2010")
+
+# Fit the models
+hh_w_fit <- train %>%
+  model(
+    `Naive` = NAIVE(Wealth),
+    `Seasonal naive` = SNAIVE(Wealth),
+    `Random walk` = RW(Wealth ~ drift())
+  )
+
+# Generate forecasts for 6 years
+hh_w_fc <- hh_w_fit %>% forecast(h = 6)
+
+# Plot forecasts against actual values
+hh_w_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(
+    filter_index(hh_wealth, "2011" ~ .),
+    colour = "black"
+  ) +
+  labs(
+    y = "Percentage",
+    title = "Forecasts for wealth as percentage of net disposable income"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 ### Australian takeaway food turnover (aus_retail).
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width = 8, fig.height=16}
 # 8 states
+# 1982 Apr - 2018 Dec (36 years)
 aus_ta_to <- aus_retail %>%
-  filter(Industry == "Takeaway food services")
+  filter(Industry == "Takeaway food services") %>%
+  select(c(State, Month, Turnover))
 
-# 1982 Apr
-# 2018 Dec
-# 3456 / 12 /8 = 36 years
+# Set training data from 1982 Apr through 2008 Dec
+train <- aus_ta_to %>%
+  filter_index("1982 Apr" ~ "2008 DEC")
 
-aus_ta_to %>% autoplot(Turnover)
+# Fit the models
+austato_fit <- train %>%
+  model(
+    `Naive` = NAIVE(Turnover),
+    `Seasonal naive` = SNAIVE(Turnover),
+    `Random walk` = RW(Turnover ~ drift())
+  )
+
+# Generate forecasts for 120 months
+austato_fc <- austato_fit %>% forecast(h = 120)
+
+# Plot forecasts against actual values
+austato_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(
+    filter_index(aus_ta_to, "2009 JAN" ~ .),
+    colour = "black"
+  ) +
+  labs(
+    y = "$Million AUD",
+    title = "Retail turnover in Australian takeaway food"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 # Exercise 5.2
@@ -166,6 +222,7 @@ Use the Facebook stock price (data set `gafa_stock`) to do the following:
 Produce a time plot of the series.
 
 ```{r warning=F, message=F}
+# Tail shows the last day is 2018-12-31
 fb_stock <- gafa_stock %>%
   filter(Symbol == 'FB')
 
@@ -174,9 +231,6 @@ fb_stock %>% autoplot(Close) +
     y = "Price (in USD)",
     title = "Closing Stock Price of Facebook"
   )
-
-# Tail shows the last day is 2018-12-31
-#tail(fb_stock)
 ```
 
 ### B
@@ -205,8 +259,8 @@ fb_fc %>%
   autoplot(fb_stock, level = NULL) +
   autolayer(fb_stock, Close, colour = "black") +
   labs(y = "$US",
-       title = "Facebook daily closing stock prices",
-       subtitle = "SUBTITLE HERE") +
+       title = "Facebook daily closing stock prices"
+  ) +
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
@@ -222,7 +276,7 @@ fb_fc %>%
   autolayer(fb_stock, Close, colour = "black") +
   labs(y = "$US",
        title = "Facebook daily closing stock prices",
-       subtitle = "SUBTITLE HERE") +
+  ) +
   guides(colour = guide_legend(title = "Forecast")) +
   geom_segment(aes(x=first(fb_stock$day), y=first(fb_stock$Close), 
                    xend=last(fb_stock$day), yend=last(fb_stock$Close)),
