@@ -15,12 +15,15 @@ library(fpp3)
 
 Produce forecasts for the following series using whichever of `NAIVE(y)`, `SNAIVE(y)` or `RW(y ~ drift())` is more appropriate in each case:
 
-- For naive forecasts, we simply set all forecasts to be the value of the last observation
--- Because a naive forecast is optimal when data follow a random walk 
+#### Definitions
 
-- we set each forecast to be equal to the last observed value from the same season of the year
+**NAIVE** - Set all forecasts to be the value of the last observation. Because a naive forecast is optimal when data follow a random walk.
 
-- allow the forecasts to increase or decrease over time, where the amount of change over time (called the drift) is set to be the average change seen in the historical data. 
+**SNAIVE** - Set each forecast to be equal to the last observed value from the same season of the year.
+
+**drift()** - Allow the forecasts to increase or decrease over time, where the amount of change over time is set to be the average change seen in the historical data. 
+
+I followed the Australian quarterly beer production and Google stock price examples from section 5.2 of the textbook, in which the forecast is performed on a training set of the given data and then compared to the test set of the data to properly evaluate the appropriate forecast method.
 
 ### Australian Population (global_economy)
 
@@ -60,9 +63,11 @@ pop_fc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+Random walk with `drift()` appears most appropriate as the overall plot shows an increasing trend. Naive not appropriate as naive doesn't capture trend and Seasonal Naive not appropriate as there doesn't appear to be a seasonal nature to the dataset.
+
 ### Bricks (aus_production)
 
-remove quarters at the tail of the `aus_production` tsibble without any data for Bricks
+Note on data prep: I removed quarters at the tail of the `aus_production` tsibble without any data for Bricks.
 
 ```{r warning=F, message=F}
 # 1956 Q1 to 2005 Q2 (198 quarters)
@@ -97,6 +102,8 @@ brick_fc %>%
   ) +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+On first appearance, neither of the 3, Naive, Seasonal Naive, nor Random Walk with drift appear good. Requiring a selection, I will go with Seasonal Naive, as the dataset does appear to have a strong seasonal pattern. I did attempt Seasonal Naive with drift, but the forecasts showed an increasing trend which did not follow the data, as the data shows a more recent decreasing trend. All that being said, Seasonal Naive as it at least captures the seasonal aspect of the dataset.
 
 ### NSW Lambs (aus_livestock)
 
@@ -137,6 +144,8 @@ lamb_fc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+I select the Seasonal Naive forecast for the NSW lambs. As mentioned in the Brick plot, the seasonal nature of the NSW lambs data lends itself to the Seasonal Naive forecast method.
+
 ### Household wealth (hh_budget).
 
 ```{r warning=F, message=F}
@@ -174,6 +183,8 @@ hh_w_fc %>%
   ) +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+The household wealth plot shows the forecast for the four countries included, Australia, Canada, Japan, and the United States. I considered combining the four countries into one, but given the small number of countries included (4), I figured it made more sense to forecast them individually as the R functions could easily handle the "mable". As each country shows an increasing trend in household wealth, I believe the Random Walk with drift() is the most appropriate forecast approach.
 
 ### Australian takeaway food turnover (aus_retail).
 
@@ -213,6 +224,8 @@ austato_fc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+Presenting each of the eight Australian states individually, a pattern does appear in which the Seasonal Naive captures the seasonal nature of the retail turnover, but the Random Walk with drift actually captures the increasing trend better. I believe the increasing trend plays a larger role in the data, thus I believe the Random Walk with drift is the most appropriate forecast method for this dataset.
+
 # Exercise 5.2
 
 Use the Facebook stock price (data set `gafa_stock`) to do the following:
@@ -232,6 +245,8 @@ fb_stock %>% autoplot(Close) +
     title = "Closing Stock Price of Facebook"
   )
 ```
+
+Straightforward plot using the `autoplot()` function.
 
 ### B
 
@@ -264,7 +279,7 @@ fb_fc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-Naive Drift and Random Walk have the same line.
+Naive Drift and Random Walk with Drift have the same line, thus only one line appears on the plot above.
 
 ### C
 
@@ -282,6 +297,8 @@ fb_fc %>%
                    xend=last(fb_stock$day), yend=last(fb_stock$Close)),
                linetype='dashed')
 ```
+
+By plotting a straight, dashed line from the first point to the final point of the provided observations, sure enough, the dashed line extends into the color lines for Naive Drift and Random Walk with Drift.
 
 ### D
 
@@ -304,10 +321,11 @@ fb_fc_2 %>%
   autoplot(fb_stock, level = NULL) +
   autolayer(fb_stock, Close, colour = "black") +
   labs(y = "$US",
-       title = "Facebook daily closing stock prices",
-       subtitle = "SUBTITLE HERE") +
+       title = "Facebook daily closing stock prices") +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+Attempting the other benchmark functions, I tried `MEAN`, `NAIVE`, `SNAIVE`, and `RW` without drift. First thoughts on the above plot, none of the four additional attempts capture the visual trend well. After a long increasing trend, the Facebook stock appears to be in a decreasing trend. No seasonal pattern is detected. I want to select `MEAN` by defense of the popular phrase "regression to the mean", but I don't think there's enough history of Facebook stock to use that argument. All that being said, I would select the `NAIVE` method. Looking at just the two above plots, I would anticipate a continued decreasing trend, but none of the benchmark functions present that forecast. So given the long increasing trend and more recent decreasing trend, I think forecasting the stock price based on the previous observation is the most appropriate approach.
 
 # Exercise 5.3
 
@@ -327,6 +345,8 @@ fit %>% forecast() %>% autoplot(recent_production)
 
 What do you conclude?
 
+The residuals do appear as white noise. The Innovation residuals plot shows a mean around zero along with constant variance around the mean. The ACF plot shows there is one lag (fourth lag) with a meaningful correlation in the residuals series, but otherwise no other correlations appear present. The histogram of the residuals isn't quite normal with the dip in the center but the overall shape does follow a normal distribution with no outliers. Given this reading of the residual plots, I would venture to conclude the seasonal naive method produces forecasts accounting for almost all available information. There's probably an opportunity to tease out a better seasonal forecast, but this seasonal naive forecast is valid.
+
 # Exercise 5.4
 
 Repeat the previous exercise using the Australian Exports series from `global_economy` and the Bricks series from `aus_production`. Use whichever of `NAIVE()` or `SNAIVE()` is more appropriate in each case.
@@ -340,7 +360,7 @@ aus_exports <- global_economy %>%
   filter(Country == 'Australia')
 
 # Define and estimate a model
-fit <- aus_exports %>% model(NAIVE(Exports))
+fit <- aus_exports %>% model(NAIVE(Exports ~ drift()))
 
 # Look at the residuals
 fit %>% gg_tsresiduals()
@@ -348,6 +368,18 @@ fit %>% gg_tsresiduals()
 # Look at some forecasts
 fit %>% forecast() %>% autoplot(aus_exports)
 ```
+
+Innovation residuals plot: Mean near zero, near constant variance ... white noise.
+
+ACF: No significant correlation.
+
+Histogram: Normal distribution.
+
+NAIVE: Selected over SNAIVE as no seasonal pattern appears.
+
+Conclusion: Naive, is by definition naive, but better than the seasonal option. The residuals do show the model accounts for most of the available data.
+
+Note: I did include `drift()` as the drift does provide an increasing trend to the forecast which I would conclude a slightly better forecast that `NAIVE` without `drift()` in this case.
 
 ### Bricks
 
@@ -365,6 +397,16 @@ fit %>% gg_tsresiduals()
 # Look at some forecasts
 fit %>% forecast() %>% autoplot(aus_bricks)
 ```
+
+The residual plots tell me the model does not account for most of the available data.
+
+Innovation residuals: Not white noise.
+
+ACF: Clear correlation present.
+
+Histogram: Not normal.
+
+Conclusion: Selected seasonal naive because I only had two options, and `NAIVE` method indicated a clear quarterly correlation in the ACF, so I selected `SNAIVE`. Considering the forecast plot, I do think the forecasts follow the visual seasonal pattern of the data. Given my struggle to answer the Bricks part of question 5.1, I think a cyclic aspect to the model is missing and thus causing the poor residual performance. Yes, the seasonal naive model can identify the seasonal nature to the data, but no the cyclic nature. Similar to Bricks in question 5.1, of the provided choices, seasonal naive is better but certainly not the best model for this dataset.
 
 # Exercise 5.7
 
@@ -399,9 +441,22 @@ autoplot(myseries, Turnover) +
 Fit a seasonal naïve model using `SNAIVE()` applied to your training data (`myseries_train`).
 
 ```{r warning=F, message=F}
+# lambda from Assignment 2
+lambda <- 0.24
+
 fit <- myseries_train %>%
-  model(SNAIVE(Turnover ~ drift()))
+  model(SNAIVE(box_cox(Turnover, lambda) ~ drift()))
+
+fit_3 <- myseries_train %>%
+  model(
+    `SNAIVE` = SNAIVE(Turnover),
+    `SNAIVE with drift` = SNAIVE(Turnover ~ drift()),
+    `SNAIVE with drift and Box-Cox` = SNAIVE(box_cox(Turnover, lambda) ~ drift()))
 ```
+
+With a bit of trial and error, and remembering the Box-Cox transformation from Assignment 2, I applied the Box-Cox transformation with lambda 0.24 (as calculated in Assignment 2) along with drift to the seasonal naive model for my retail time series.
+
+In order to provide some variety for comparisons in the later steps, I created a model with basic seasonal naive method, season naive method with drift, and finally the seasonal naive with drift and Box-Cox transformation.
 
 ## D
 
@@ -413,38 +468,44 @@ fit %>% gg_tsresiduals()
 
 Do the residuals appear to be uncorrelated and normally distributed?
 
+No, the residuals do show correlation in the ACF plot. The Innovation residuals plot shows a near-constant variance and certainly outperformed the variance of the plot without the Box-Cox transformation. Overall, the histogram plot has a good normal shape, again better than the histogram with the Box-Cox transformation.
+
+Note: The ``gg_tsresiduals()` function can only handle one model, so I used the model with Box-Cox transformation.
+
 ## E
 
 Produce forecasts for the test data
 
 ```{r warning=F, message=F}
-fc <- fit %>%
+fc <- fit_3 %>%
   forecast(new_data = anti_join(myseries, myseries_train))
 fc %>% autoplot(myseries)
 ```
+
+For the forecast with Box-Cox transformation, the forecast certainly follow the trajectory of the time series. The increase in the seasonal nature of the time series does not appear reflected in the forecasts despite the use of the Box-Cox transformation. Overall though, the actual values do appear with the 80% confidence interval which is a good sign of the forecast model.
+
+The forecast with drift does provide the seasonal pattern along with the increase in trend. The basic seasonal naive forecast simply forecasts a seasonal pattern with no regard for trend.
 
 ## F
 
 Compare the accuracy of your forecasts against the actual values.
 
 ```{r warning=F, message=F}
-fit %>% accuracy()
+fit_3 %>% accuracy()
+```
+
+For comparison of the three models on the fitted values, the seasonal naive with draft model outperforms the other two with a MAE of 9.68, RMSE of 13.2, MAPE of 7.65, and MASE of 0.840. The second best performing model on the fitted values is the seasonal naive with drift and the Box-Cox transformation. Values can be seen above.
+
+```{r warning=F, message=F}
 fc %>% accuracy(myseries)
 ```
+
+For evaluating the models on the forecasted data, the seasonal naive model with drift and the Box-Cox transformation clearly outperforms the other two. The model with Box-Cox transformation shows results of a MAE of 21.8, RMSE of 27.6, MAPE of 7.17, and MASE of 1.89. The MAPE of 7.17 is actually the best score for this metric across all six combinations.
+
+With the evaluation of the forecasts, the seasonal naive model with drift and Box-Cox transformation proves the most accurate.
 
 ## G
 
 How sensitive are the accuracy measures to the amount of training data used?
 
-```{r warning=F, message=F}
-
-```
-
-
-
-
-
-
-```{r warning=F, message=F}
-
-```
+I suspect the accuracy measures are greatly dependent on the amount of training data used. As the book suggests, a test set should use about 20% of the total sample, implying roughly 80% of the training data should be used. The amount of training data plays a direct role in the calculation of the model, which then has a direct impact on the fitted values and point forecasts. A model with too little of the training data may perform poorly on the test set. Even a model with perfect fit on the training set may perform poorly on the test set. This is known as overfitting. The amount of training data has a direct impact on the accuracy through the fit of the model as it applies to the test set. This understanding of training data amount leads to the notion of forecasting being as much an art as it is a science.
