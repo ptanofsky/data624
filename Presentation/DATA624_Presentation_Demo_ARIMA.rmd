@@ -8,10 +8,74 @@ output: html_document
 
 
 ```{r warning=F, message=F}
+# Import required R libraries
+library(fpp3)
+```
 
+```{r warning=F, message=F}
+us_gdp <- read.delim("US_GDP.txt", header = TRUE)
+head(us_gdp)
+summary(us_gdp)
+
+
+us_gdp <- us_gdp %>%
+  mutate(QUARTER = yearquarter(YEAR)) %>%
+  select(-c(YEAR)) %>%
+  as_tsibble(index = QUARTER)
+
+head(us_gdp)
+
+us_gdp %>% autoplot(GDP)
+```
+
+
+```{r warning=F, message=F}
+fit <- us_gdp %>%
+  model(ARIMA(GDP))
+report(fit)
+```
+
+
+```{r warning=F, message=F}
+fit %>% forecast(h=10) %>%
+  autoplot(us_gdp) +
+  labs(y = "GDP", title = "US GDP")
+```
+
+
+```{r warning=F, message=F}
+us_gdp %>%
+  ACF(GDP) %>%
+  autoplot()
+```
+
+
+```{r warning=F, message=F}
+us_gdp %>%
+  PACF(GDP) %>%
+  autoplot()
+```
+
+
+```{r warning=F, message=F}
+us_gdp %>%
+  gg_tsdisplay(plot_type="partial")
 ```
 
 
 ```{r warning=F, message=F}
 
 ```
+
+
+
+
+
+
+
+
+
+```{r warning=F, message=F}
+
+```
+
