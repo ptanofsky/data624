@@ -1,0 +1,17 @@
+---
+title: "DATA 624 Presentation Demo - ARIMA"
+subtitle: "CUNY Fall 2021"
+author: "Alexander Ng and Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+
+```{r warning=F, message=F}
+
+```
+
+
+```{r warning=F, message=F}
+
+```
