@@ -22,24 +22,52 @@ str(Glass)
 
 Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
 
+```{r warning=F, message=F}
+# Required libraries
+library(ggplot2)
+library(tidyverse)
+
+Glass %>% select(-c(Type)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_histogram() + facet_wrap(~key, scales = 'free')
+```
+
+```{r warning=F, message=F}
+library(corrplot)
+
+corr <- Glass %>% select(-c(Type)) %>% cor()
+
+corrplot(corr, method="number")
+```
+
+
 
 ### (b)
 
 Do there appear to be any outliers in the data? Are any predictors skewed?
 
+```{r warning=F, message=F}
+Glass %>% select(-c(Type)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_boxplot() + facet_wrap(~key, scales = 'free')
+```
+
 ### (c)
 
 Are there any relevant transformations of one or more predictors that might improve the classification model?
 
+```{r warning=F, message=F}
+
+```
+
 # Exercise 3.2
 
-The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmen-tal conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes.
-
-The data can be loaded via:
+The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmental conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes. The data can be loaded via:
 
 ```{r warning=F, message=F}
 library(mlbench)
 data(Soybean)
+summary(Soybean)
 ## See ?Soybean for details
 ```
 
@@ -47,14 +75,40 @@ data(Soybean)
 
 Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
 
+```{r warning=F, message=F}
+library(caret)
+cols <- nearZeroVar(Soybean, saveMetrics = TRUE, names = TRUE)
+
+(cols)
+```
+
+```{r warning=F, message=F, fig.height=16}
+Soybean %>% select(-c(Class)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_bar() + facet_wrap(~key, ncol=3, scales = 'free')
+```
+
 ### (b)
 
 Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?
 
+```{r warning=F, message=F}
+colSums_Missing_Count <- data.frame(colSums(is.na(Soybean)))
+
+colnames(colSums_Missing_Count) <- "NA.Count"
+
+(colSums_Missing_Count)
+
+# colSums(is.na(Soybean)) / nrow(Soybean)
+# order(colSums(is.na(Soybean)))
+
+library(naniar)
+vis_miss(Soybean)
+```
+
 ### (c)
 
 Develop a strategy for handling missing data, either by eliminating predictors or imputation.
-
 
 ```{r warning=F, message=F}
 
@@ -63,6 +117,9 @@ Develop a strategy for handling missing data, either by eliminating predictors o
 
 
 
+```{r warning=F, message=F}
+
+```
 
 
 
