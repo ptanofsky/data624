@@ -1,5 +1,5 @@
 ---
-title: "DATA 624 Assignment 3"
+title: "DATA 624 Assignment 4"
 subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
 date: "`r format(Sys.time(), '%d %B %Y')`"
@@ -32,7 +32,7 @@ Glass %>% select(-c(Type)) %>%
   ggplot(aes(x = value)) + geom_histogram(bins=30) + facet_wrap(~key, scales = 'free')
 ```
 
-The histograms above for each predictor variable show near normal plots for Al, Na, and Si. The histograms for Ca and Rl aren't quite normal, as both have a bit of right skew. Histograms for Ba, Fe, and K clearly have right skew and Mg appears bi-modal. 
+The histograms above for each predictor variable show near normal plots for Al, Na, and Si. The histograms for Ca and RI aren't quite normal, as both have a bit of right skew. Histograms for Ba, Fe, and K clearly have right skew and Mg appears bi-modal. 
 
 ```{r warning=F, message=F}
 library(corrplot)
@@ -42,7 +42,7 @@ corr <- Glass %>% select(-c(Type)) %>% cor()
 corrplot(corr, method="number")
 ```
 
-The correlation plot above shows a high positive correlation between Ca and Rl, which would indicate both predictor variables contain almost the same information. The only other pair of predictor variables above 0.5 or below -0.5 is Si and Rl with a correlation value of -0.54 which means these two have an inverse relationship.
+The correlation plot above shows a high positive correlation between Ca and RI, which would indicate both predictor variables contain almost the same information. The only other pair of predictor variables above 0.5 or below -0.5 is Si and RI with a correlation value of -0.54 which means these two have an inverse relationship.
 
 
 ### (b)
@@ -58,20 +58,74 @@ Glass %>% select(-c(Type)) %>%
   facet_wrap(~key, scales = 'free')
 ```
 
-Yes, based on the histograms from section (a) and the boxplots above, outliers do appears as the black dots in the boxplots beyond the whiskers (1.5 IQR from the hinge). Thus, all the predictor variables except Mg appear to have outliers by definition. As mentioned in section (a), yes most of the predictors are skewed, histograms for Ba, Fe, and K clearly have right skew, and Ca and Rl have a bit of right skew. 
+Yes, based on the histograms from section (a) and the boxplots above, outliers do appears as the black dots in the boxplots beyond the whiskers (1.5 IQR from the hinge). Thus, all the predictor variables except Mg appear to have outliers by definition. As mentioned in section (a), yes most of the predictors are skewed, histograms for Ba, Ca, and K clearly have right skew, and Fe and RI have a bit of right skew. 
+
+```{r warning=F, message=F}
+library(e1071)
+skewValues <- apply(Glass[1:9],2,skewness)
+(skewValues)
+```
+
+Based on the `skewness` function, all the predictors are right skewed except for Mg an Si. The predictors with skew values furthest from zero are K, Ba, Ca, which matches the results of the visual assessment from the histograms.
 
 ### (c)
 
 Are there any relevant transformations of one or more predictors that might improve the classification model?
 
-The first transformation, would be the **removal** of either Ca or Rl due to their high positive correlation. For the predictors with clear right skew, the Box-Cox transformation can be applied. The **Box-Cox transformation** can identify the proper log, square, square root or inverse transformation in order to resolve the skew-ness and transform the data to fit a more normal distribution for use in a predictive model. For the outliers, **spatial sign transformation** can be applied which projects the predictor values onto a multidimensional sphere, in essence making all the sample values the same distance from the center of the sphere.
+The first transformation, would be the **removal** of either Ca or RI due to their high positive correlation. For the predictors with clear right skew, the Box-Cox transformation can be applied. The **Box-Cox transformation** can identify the proper log, square, square root or inverse transformation in order to resolve the skew-ness and transform the data to fit a more normal distribution for use in a predictive model. For the outliers, **spatial sign transformation** can be applied which projects the predictor values onto a multidimensional sphere, in essence making all the sample values the same distance from the center of the sphere.
+
+```{r warning=F, message=F}
+library(caret)
+# Box Cox, center, scale transformations
+
+trans <- preProcess(Glass, method = c("BoxCox", "center", "scale")) 
+
+transformed <- predict(trans, Glass) 
+
+transformed %>% select(-c(Type)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_histogram(bins=30) + facet_wrap(~key, scales = 'free')
+```
+
+Applying the Box-Cox transformation above with centering and scaling, I'll be honest the shape of the near normal distributions did not improve that much. Also, the amount of skew did not appear to improve either.
+
+```{r warning=F, message=F}
+library(caret)
+# Spatial sign, center, scale transformations
+
+trans <- preProcess(Glass, method = c("spatialSign", "center", "scale")) 
+
+transformed <- predict(trans, Glass) 
+
+transformed %>% select(-c(Type)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_histogram(bins=30) + facet_wrap(~key, scales = 'free')
+```
+
+Applying the spatial sign transformation above with centering and scaling, the not normal distributions for Ba, Fe, K, and Mg aren't as bad as the initial histograms.
+
+```{r warning=F, message=F}
+library(caret)
+# Spatial sign, center, scale transformations
+
+trans <- preProcess(Glass, method = c("BoxCox", "center", "scale", "pca")) 
+
+transformed <- predict(trans, Glass) 
+
+transformed %>% select(-c(Type)) %>% 
+  gather() %>% 
+  ggplot(aes(x = value)) + geom_histogram(bins=30) + facet_wrap(~key, scales = 'free')
+```
+
+And finally, from the book example, I've applied Box-Cox, center, scaling and PCA. Based on the above histograms of the principal components, the visual assessment does look good in regards to normal distributions.
+
+At this point, I'd probably go with PCA despite my initial paragraph describing Box-Cox and Spatial Sign.
 
 # Exercise 3.2
 
 The soybean data can also be found at the UC Irvine Machine Learning Repository. Data were collected to predict disease in 683 soybeans. The 35 predictors are mostly categorical and include information on the environmental conditions (e.g., temperature, precipitation) and plant conditions (e.g., left spots, mold growth). The outcome labels consist of 19 distinct classes. The data can be loaded via:
 
 ```{r warning=F, message=F}
-library(mlbench)
 data(Soybean)
 summary(Soybean)
 ## See ?Soybean for details
@@ -170,21 +224,25 @@ The above info provides the number of rows by class value. From the count of row
 Develop a strategy for handling missing data, either by eliminating predictors or imputation.
 
 ```{r warning=F, message=F}
-
+colSums_Missing_Count %>%
+  mutate(NA.Count.Pct = NA.Count/683)
 ```
 
+The above output indicates the percentage of missing values by column. No column has more than 18% missing data.
 
+First, before defining the strategy, I do want to address the findings from section (b). Given the missing values are concentrated to only 5 of the 19 class values, then I believe there is a need for additional research behind those missing values. Potentially, an "informative missingness" exists that we could uncover with more knowledge of the subject or the observational method of data collection.
 
-```{r warning=F, message=F}
+For handling the missing data, I believe a two-step approach may be valid. First step, eliminate the predictors with near zero variance, `leaf.mild`, `mycelium`, and `sclerotia`. As the textbook indicates, little predictive value will come from these three predictors. Second, considering the missing values of the remaining predictors, I don't believe PCA via imputation is a good approach as the missing data is found across almost all the predictors. Typically, PCA requires missing data across a small number of predictors. In order to impute the remaining predictors, I'd suggest K-nearest neighbor model (KNN). A 5-nearest neighbor model would be a good parameter selection to start.
 
+Another consideration would be a tree-based prediction model which was alluded to several times throughout Chapter 3 of the textbook. If the missing values do contain "informative missingness", then a tree-based approach may perform well in predicting the correct class as compared to the regression model.
+
+```{r warning=F, message=F, eval=F}
+library(mice)
+
+# from: https://datascienceplus.com/imputing-missing-data-with-r-mice-package/
+tempData <- mice(Soybean,m=5,maxit=50,meth='pmm',seed=500)
+summary(tempData)
+completedData <- complete(tempData,1)
 ```
 
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-
+I did naively attempt the imputation with the `mice` package, but the processing took so long and the result of imputed values didn't prove much to me besides that the function worked as advertised.
