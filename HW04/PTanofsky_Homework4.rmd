@@ -22,15 +22,17 @@ str(Glass)
 
 Using visualizations, explore the predictor variables to understand their distributions as well as the relationships between predictors.
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width=8}
 # Required libraries
 library(ggplot2)
 library(tidyverse)
 
 Glass %>% select(-c(Type)) %>% 
   gather() %>% 
-  ggplot(aes(x = value)) + geom_histogram() + facet_wrap(~key, scales = 'free')
+  ggplot(aes(x = value)) + geom_histogram(bins=30) + facet_wrap(~key, scales = 'free')
 ```
+
+The histograms above for each predictor variable show near normal plots for Al, Na, and Si. The histograms for Ca and Rl aren't quite normal, as both have a bit of right skew. Histograms for Ba, Fe, and K clearly have right skew and Mg appears bi-modal. 
 
 ```{r warning=F, message=F}
 library(corrplot)
@@ -40,25 +42,29 @@ corr <- Glass %>% select(-c(Type)) %>% cor()
 corrplot(corr, method="number")
 ```
 
+The correlation plot above shows a high positive correlation between Ca and Rl, which would indicate both predictor variables contain almost the same information. The only other pair of predictor variables above 0.5 or below -0.5 is Si and Rl with a correlation value of -0.54 which means these two have an inverse relationship.
 
 
 ### (b)
 
 Do there appear to be any outliers in the data? Are any predictors skewed?
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width=8}
 Glass %>% select(-c(Type)) %>% 
   gather() %>% 
-  ggplot(aes(x = value)) + geom_boxplot() + facet_wrap(~key, scales = 'free')
+  ggplot(aes(x = value)) + 
+  stat_boxplot(geom = "errorbar", width = 0.5) + 
+  geom_boxplot() + 
+  facet_wrap(~key, scales = 'free')
 ```
+
+Yes, based on the histograms from section (a) and the boxplots above, outliers do appears as the black dots in the boxplots beyond the whiskers (1.5 IQR from the hinge). Thus, all the predictor variables except Mg appear to have outliers by definition. As mentioned in section (a), yes most of the predictors are skewed, histograms for Ba, Fe, and K clearly have right skew, and Ca and Rl have a bit of right skew. 
 
 ### (c)
 
 Are there any relevant transformations of one or more predictors that might improve the classification model?
 
-```{r warning=F, message=F}
-
-```
+The first transformation, would be the **removal** of either Ca or Rl due to their high positive correlation. For the predictors with clear right skew, the Box-Cox transformation can be applied. The **Box-Cox transformation** can identify the proper log, square, square root or inverse transformation in order to resolve the skew-ness and transform the data to fit a more normal distribution for use in a predictive model. For the outliers, **spatial sign transformation** can be applied which projects the predictor values onto a multidimensional sphere, in essence making all the sample values the same distance from the center of the sphere.
 
 # Exercise 3.2
 
@@ -75,6 +81,17 @@ summary(Soybean)
 
 Investigate the frequency distributions for the categorical predictors. Are any of the distributions degenerate in the ways discussed earlier in this chapter?
 
+First, I generate a barplot for each predictor variable defining the frequency distribution, in order to provide an initial visual assessment.
+
+```{r warning=F, message=F, fig.height=16}
+Soybean %>% select(-c(Class)) %>% 
+  gather() %>% 
+  drop_na() %>%
+  ggplot(aes(x = value)) + geom_bar() + facet_wrap(~key, ncol=3, scales = 'free')
+```
+
+The above barplots show many plots may be susceptible to severe disproportionate frequency. The `nearZeroVar` function below will calculate and identify those predictor variables with near zero variance, and thus degenerative frequency distributions.
+
 ```{r warning=F, message=F}
 library(caret)
 cols <- nearZeroVar(Soybean, saveMetrics = TRUE, names = TRUE)
@@ -82,29 +99,71 @@ cols <- nearZeroVar(Soybean, saveMetrics = TRUE, names = TRUE)
 (cols)
 ```
 
-```{r warning=F, message=F, fig.height=16}
-Soybean %>% select(-c(Class)) %>% 
-  gather() %>% 
-  ggplot(aes(x = value)) + geom_bar() + facet_wrap(~key, ncol=3, scales = 'free')
-```
+The output from the function `nearZeroVar` identifies `leaf.mild`, `mycelium`, and `sclerotia` as having near zero variance, and thus degenerate distributions. None of the predictor variables have zero variance based on the above calculations. Given these three variables have near-zero variance, they would be good candidates to remove from the predictive model.
 
 ### (b)
 
 Roughly 18% of the data are missing. Are there particular predictors that are more likely to be missing? Is the pattern of missing data related to the classes?
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width=8}
+# Count the number of observations with a missing value by predictor variable
 colSums_Missing_Count <- data.frame(colSums(is.na(Soybean)))
 
+# Name the column for the NA count
 colnames(colSums_Missing_Count) <- "NA.Count"
 
-(colSums_Missing_Count)
+# Convert the index column into a named column to keep the variable names
+colSums_Missing_Count <- cbind(Variable = rownames(colSums_Missing_Count), colSums_Missing_Count)
+rownames(colSums_Missing_Count) <- 1:nrow(colSums_Missing_Count)
 
-# colSums(is.na(Soybean)) / nrow(Soybean)
-# order(colSums(is.na(Soybean)))
+# Sort by the missing count in descending order
+colSums_Missing_Count <- colSums_Missing_Count[order(-colSums_Missing_Count$NA.Count),]
+
+# Output the results
+(colSums_Missing_Count)
 
 library(naniar)
 vis_miss(Soybean)
 ```
+
+The 5 predictor variables with the highest value missing count are `hail`, `sever`, `seed.tmt`, `lodging`, and `germ`. Overall, 11 predictor variables have over 100 missing values.
+
+The `vis_miss` function from the library `naniar` shows the missing values do occur across the same observations. The next step will be to identify if those observations align to specific class values.
+
+```{r warning=F, message=F}
+Soybean %>%
+  filter(!complete.cases(.)) %>%
+  group_by(Class)
+```
+
+Above output indicates 121 rows are missing at least 1 value.
+
+```{r warning=F, message=F}
+Soybean %>%
+  filter(!complete.cases(.)) %>%
+  group_by(Class) %>%
+  summarize(Count = n())
+```
+
+Above output indicates those 121 rows occur across 5 classes. Class value `phytophthora-rot` contains the most rows with missing data at 68.
+
+```{r warning=F, message=F}
+Soybean %>% 
+  mutate(MissingValues = rowSums(is.na(Soybean))) %>%
+  mutate(MissingPct = MissingValues / 35) %>%
+  group_by(Class) %>%
+  summarise(MissingPctAvg = mean(MissingPct)) %>%
+  filter(MissingPctAvg > 0)
+```
+
+Above output calculates the average percentage of missing values for those 5 classes. The above indicates `2-4-d-injury` rows are missing 80% of the values while `cyst-nematode` and `herbicide-injury` are also missing over half of the predictor values.
+
+```{r warning=F, message=F}
+Soybean %>% 
+  count(Class, sort=TRUE)
+```
+
+The above info provides the number of rows by class value. From the count of rows with missing data by class value, the assessment shows that all rows for `2-4-d-injury`, `cyst-nematode`, `diaporthe-pod-&-stem-blight`, and `herbicide-injury` have some missing data. And for `phytophthora-rot`, only 20 rows of the 88 do not contain missing values.
 
 ### (c)
 
@@ -116,10 +175,16 @@ Develop a strategy for handling missing data, either by eliminating predictors o
 
 
 
+```{r warning=F, message=F}
+
+```
 
 ```{r warning=F, message=F}
 
 ```
 
+```{r warning=F, message=F}
+
+```
 
 
