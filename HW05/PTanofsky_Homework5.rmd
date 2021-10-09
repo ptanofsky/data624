@@ -32,17 +32,17 @@ fit <- vic_pigs %>%
 
 report(fit)
 
+fit
+
 fc <- fit %>%
   forecast(h = 4)
 ```
 
-$\alpha$ is 0.32 and $\ell_{0}$ is 100646.6
+**Results:** $\alpha$ is 0.32 and $\ell_{0}$ is 100646.6
 
 ```{r warning=F, message=F}
 fc %>%
   autoplot(vic_pigs) +
-  geom_line(aes(y = .fitted), col="#D55E00",
-            data = augment(fit)) +
   labs(y="Count", title="Pigs Slaughtered: Victoria") +
   guides(colour = "none")
 ```
@@ -52,8 +52,31 @@ fc %>%
 Compute a 95% prediction interval for the first forecast using $\hat{y} \pm 1.96s$ where $s$ is the standard deviation of the residuals. Compare your interval with the interval produced by R.
 
 ```{r warning=F, message=F}
+y_hat <- mean(fc$.mean[1])
 
+# Apply augment function to get the residuals
+aug_fit <- augment(fit)
+
+# Calculate standard deviation based on the residuals from augment
+s <- sd(aug_fit$.resid)
+
+# Calculate the 95% prediction intervals
+upper_limit_95 <- y_hat + (s * 1.96)
+lower_limit_95 <- y_hat - (s * 1.96)
+
+int_95 <- c(lower_limit_95, upper_limit_95)
+
+# Output calculate interval values
+int_95
+
+# Determine the model forecast 95% intervals
+fc_hilo <- fc %>% hilo()
+
+# Output model interval values
+fc_hilo$`95%`[1]
 ```
+
+The model low value is 16.22 lower than my calculated low interval value. The model high value is 16.2 higher than my calculate high interval value. It appears the model calculated values provide a slightly larger 95% prediction interval the calculations I performed. That being said, the intervals are very similar.
 
 # Exercise 8.5
 
@@ -63,6 +86,7 @@ Data set `global_economy` contains the annual Exports from many countries. Selec
 fra_exports <- global_economy %>%
   filter(Country == 'France')
 
+# Selected France for no particular reason besides it contains data for the entirety of the defined time series.
 head(fra_exports)
 ```
 
@@ -77,6 +101,8 @@ fra_exports %>%
   guides(colour = "none")
 ```
 
+**Main features:** Overall, there appears to be an upward trend in the Exports, but I do not see any seasonality, not cyclic nature to the time series. Departing from the overall upward trend, a dip appears between 1960 and 1970. And dip occurs between 1985 and 1998. Also, a very distinct negative spike occurs bween 2008 and 2011.
+
 ## Section b
 
 Use an ETS(A,N,N) model to forecast the series, and plot the forecasts.
@@ -88,13 +114,12 @@ fit <- fra_exports %>%
 
 report(fit)
 
+# Set the forecast to 10 for 10 years
 fc <- fit %>%
-  forecast(h = 4)
+  forecast(h = 10)
 
 fc %>%
   autoplot(fra_exports) +
-  geom_line(aes(y = .fitted), col="#D55E00",
-            data = augment(fit)) +
   labs(y="Count", title="Exports: France") +
   guides(colour = "none")
 ```
@@ -104,7 +129,9 @@ fc %>%
 Compute the RMSE values for the training data.
 
 ```{r warning=F, message=F}
+fit_acc <- accuracy(fit)
 
+fit_acc
 ```
 
 ## Section d
@@ -112,7 +139,11 @@ Compute the RMSE values for the training data.
 Compare the results to those from an ETS(A,A,N) model. (Remember that the trended model is using one more parameter than the simpler model.) Discuss the merits of the two forecasting methods for this data set.
 
 ```{r warning=F, message=F}
+fit_2 <- fra_exports %>%
+  model(ETS(Exports ~ error("A") + trend("A") + season("N")))
 
+fit_2_acc <- accuracy(fit_2)
+fit_2_acc
 ```
 
 ## Section e
@@ -120,12 +151,68 @@ Compare the results to those from an ETS(A,A,N) model. (Remember that the trende
 Compare the forecasts from both methods. Which do you think is best?
 
 ```{r warning=F, message=F}
+# Set the forecast to 10 for 10 years
+fc_2 <- fit_2 %>%
+  forecast(h = 10)
 
+fc_2 %>%
+  autoplot(fra_exports) +
+  labs(y="Count", title="Exports: France") +
+  guides(colour = "none")
 ```
 
 ## Section f
 
 Calculate a 95% prediction interval for the first forecast for each model, using the RMSE values and assuming normal errors. Compare your intervals with those produced using R.
+
+```{r warning=F, message=F}
+# 95% prediction interval for the first forecast: ETS(A,N,N)
+y_hat <- fc$.mean[1]
+
+lower_limit_95_fc <- y_hat - (fit_acc$RMSE * 1.96)
+upper_limit_95_fc <- y_hat + (fit_acc$RMSE * 1.96)
+
+ets_ann_interval <- c(lower_limit_95_fc, upper_limit_95_fc)
+
+y_hat
+ets_ann_interval
+
+
+# 95% prediction interval for the second forecast: ETS(A,A,N)
+y_hat_2 <- fc_2$.mean[1]
+
+lower_limit_95_fc2 <- y_hat_2 - (fit_2_acc$RMSE * 1.96)
+upper_limit_95_fc2 <- y_hat_2 + (fit_2_acc$RMSE * 1.96)
+
+ets_aan_interval <- c(lower_limit_95_fc2, upper_limit_95_fc2)
+
+y_hat_2
+ets_aan_interval
+
+# Determine the model forecast 95% intervals
+fc_hilo <- fc %>% hilo()
+
+# Output model interval values
+fc_hilo$`95%`[1]
+
+# Determine the model forecast 95% intervals
+fc_2_hilo <- fc_2 %>% hilo()
+
+# Output model interval values
+fc_2_hilo$`95%`[1]
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
 
 ```{r warning=F, message=F}
 
@@ -138,10 +225,59 @@ Forecast the Chinese GDP from the `global_economy` data set using an ETS model. 
 [Hint: use a relatively large value of `h` when forecasting, so you can clearly see the differences between the various options when plotting the forecasts.]
 
 ```{r warning=F, message=F}
-chn_exports <- global_economy %>%
-  filter(Country == 'China')
+chn_gdp <- global_economy %>%
+  filter(Country == 'China') %>%
+  mutate(GDP = GDP/1e9) %>%
+  select(c(Country, Code, Year, GDP))
 
-head(chn_exports)
+(chn_gdp)
+
+# GDP:	Gross domestic product (in $USD February 2019).
+chn_gdp %>%
+  autoplot(GDP) +
+  labs(y="Billions $USD", title="GDP: China") +
+  guides(colour = "none")
+```
+
+
+```{r warning=F, message=F}
+fit <- chn_gdp %>%
+  model(
+    SES = ETS(GDP ~ error("A") + trend("N") + season("N")),
+    Holt = ETS(GDP ~ error("A") + trend("A") + season("N")),
+    Damped = ETS(GDP ~ error("A") + trend("Ad") + season("N"))
+  )
+
+# Forecast for 20 years
+fc <- fit %>% forecast(h = 20)
+
+fc %>%
+  autoplot(chn_gdp, level=NULL) +
+  labs(y="Billions $USD", title="GDP: China") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+# Calculate lambda for Box-Cox
+lambda <- chn_gdp %>%
+  features(GDP, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+fit_bc <- chn_gdp %>%
+  model(
+    SES = ETS(box_cox(GDP, lambda) ~ error("A") + trend("N") + season("N")),
+    Holt = ETS(box_cox(GDP, lambda) ~ error("A") + trend("A") + season("N")),
+    Damped = ETS(box_cox(GDP, lambda) ~ error("A") + trend("Ad") + season("N"))
+  )
+
+# Forecast for 20 years
+fc_bc <- fit_bc %>% forecast(h = 20)
+
+fc_bc %>%
+  autoplot(chn_gdp, level=NULL) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed China GDP with $\\lambda$ = ",
+         round(lambda,2)))) +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 # Exercise 8.7
@@ -149,9 +285,29 @@ head(chn_exports)
 Find an ETS model for the Gas data from `aus_production` and forecast the next few years. Why is multiplicative seasonality necessary here? Experiment with making the trend damped. Does it improve the forecasts?
 
 ```{r warning=F, message=F}
-gas <- aus_production
+# Gas:	Gas production in petajoules.
+aus_gas <- aus_production %>%
+  select(Quarter, Gas)
 
-head(gas)
+aus_gas %>%
+  autoplot(Gas)
+
+fit <- aus_gas %>%
+  model(
+    add = ETS(Gas ~ error("A") + trend("A") + season("N")),
+    mult = ETS(Gas ~ error("M") + trend("A") + season("N")),
+    add_sea = ETS(Gas ~ error("A") + trend("A") + season("A")),
+    mult_sea = ETS(Gas ~ error("M") + trend("A") + season("M")),
+    mult_sea_damp = ETS(Gas ~ error("M") + trend("Ad") + season("M"))
+  )
+
+# Forecast for 5 years (interval is quarters)
+fc <- fit %>% forecast(h = 20)
+
+fc %>%
+  autoplot(aus_gas, level=NULL) +
+  labs(y="Petajoules", title="Gas Production: Australia") +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 # Exercise 8.8
@@ -171,16 +327,26 @@ head(myseries)
 
 Why is multiplicative seasonality necessary for this series?
 
-```{r warning=F, message=F}
-
-```
+**Answer**: XXX
 
 ## Section b
 
 Apply Holt-Winters’ multiplicative method to the data. Experiment with making the trend damped.
 
 ```{r warning=F, message=F}
+fit_ms <- myseries %>%
+  model(
+    M_S = ETS(Turnover ~ error("M") + trend("A") + season("M")),
+    M_S_D = ETS(Turnover ~ error("M") + trend("Ad") + season("M"))
+  )
 
+# Forecast for 5 years (interval is monthly)
+fc_ms <- fit_ms %>% forecast(h = 60)
+
+fc_ms %>%
+  autoplot(myseries, level=NULL) +
+  labs(y="$Million AUD", title="Retail Turnover: Australia") +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 ## Section c
@@ -188,7 +354,9 @@ Apply Holt-Winters’ multiplicative method to the data. Experiment with making 
 Compare the RMSE of the one-step forecasts from the two methods. Which do you prefer?
 
 ```{r warning=F, message=F}
+acc_fit <- accuracy(fit_ms)
 
+acc_fit
 ```
 
 ## Section d
@@ -196,7 +364,22 @@ Compare the RMSE of the one-step forecasts from the two methods. Which do you pr
 Check that the residuals from the best method look like white noise.
 
 ```{r warning=F, message=F}
+aug_fit <- augment(fit_ms)
 
+#msd <- fit_ms %>%
+#  filter(.model == "M_S_D") %>%
+#  gg_tsresiduals()
+
+#model <- fit_ms$M_S_D
+#m <- mable(fit_ms$M_S_D)
+#m %>% gg_tsresiduals()
+
+fit_msd <- myseries %>%
+  model(ETS(Turnover ~ error("M") + trend("Ad") + season("M")))
+
+fit_msd
+
+fit_msd %>% gg_tsresiduals()
 ```
 
 ## Section e
