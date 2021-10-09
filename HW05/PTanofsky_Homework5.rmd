@@ -1,9 +1,15 @@
 ---
 title: "DATA 624 Assignment 5"
+subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
-date: "10/5/2021"
+date: "`r format(Sys.time(), '%d %B %Y')`"
 output: html_document
 ---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(fpp3)
+```
 
 # Exercise 8.1
 
@@ -14,7 +20,31 @@ Consider the the number of pigs slaughtered in Victoria, available in the `aus_l
 Use the `ETS()` function to estimate the equivalent model for simple exponential smoothing. Find the optimal values of $\alpha$ and $\ell_{0}$, and generate forecasts for the next four months.
 
 ```{r warning=F, message=F}
+vic_pigs <- aus_livestock %>%
+  filter(State == 'Victoria',
+           Animal == 'Pigs')
 
+#head(vic_pigs)
+
+# Estimate parameters
+fit <- vic_pigs %>%
+  model(ETS(Count ~ error("A") + trend("N") + season("N")))
+
+report(fit)
+
+fc <- fit %>%
+  forecast(h = 4)
+```
+
+$\alpha$ is 0.32 and $\ell_{0}$ is 100646.6
+
+```{r warning=F, message=F}
+fc %>%
+  autoplot(vic_pigs) +
+  geom_line(aes(y = .fitted), col="#D55E00",
+            data = augment(fit)) +
+  labs(y="Count", title="Pigs Slaughtered: Victoria") +
+  guides(colour = "none")
 ```
 
 ## Section b
@@ -30,7 +60,10 @@ Compute a 95% prediction interval for the first forecast using $\hat{y} \pm 1.96
 Data set `global_economy` contains the annual Exports from many countries. Select one country to analyse.
 
 ```{r warning=F, message=F}
+fra_exports <- global_economy %>%
+  filter(Country == 'France')
 
+head(fra_exports)
 ```
 
 ## Section a
@@ -38,7 +71,10 @@ Data set `global_economy` contains the annual Exports from many countries. Selec
 Plot the Exports series and discuss the main features of the data.
 
 ```{r warning=F, message=F}
-
+fra_exports %>%
+  autoplot(Exports) +
+  labs(y="Count", title="Exports: France") +
+  guides(colour = "none")
 ```
 
 ## Section b
@@ -46,7 +82,21 @@ Plot the Exports series and discuss the main features of the data.
 Use an ETS(A,N,N) model to forecast the series, and plot the forecasts.
 
 ```{r warning=F, message=F}
+# Estimate parameters
+fit <- fra_exports %>%
+  model(ETS(Exports ~ error("A") + trend("N") + season("N")))
 
+report(fit)
+
+fc <- fit %>%
+  forecast(h = 4)
+
+fc %>%
+  autoplot(fra_exports) +
+  geom_line(aes(y = .fitted), col="#D55E00",
+            data = augment(fit)) +
+  labs(y="Count", title="Exports: France") +
+  guides(colour = "none")
 ```
 
 ## Section c
@@ -88,19 +138,33 @@ Forecast the Chinese GDP from the `global_economy` data set using an ETS model. 
 [Hint: use a relatively large value of `h` when forecasting, so you can clearly see the differences between the various options when plotting the forecasts.]
 
 ```{r warning=F, message=F}
+chn_exports <- global_economy %>%
+  filter(Country == 'China')
 
+head(chn_exports)
 ```
 
 # Exercise 8.7
 
 Find an ETS model for the Gas data from `aus_production` and forecast the next few years. Why is multiplicative seasonality necessary here? Experiment with making the trend damped. Does it improve the forecasts?
 
+```{r warning=F, message=F}
+gas <- aus_production
+
+head(gas)
+```
+
 # Exercise 8.8
 
 Recall your retail time series data (from Exercise 8 in Section 2.10).
 
 ```{r warning=F, message=F}
+set.seed(8675309)
 
+myseries <- aus_retail %>%
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+
+head(myseries)
 ```
 
 ## Section a
@@ -155,6 +219,10 @@ For the same retail data, try an STL decomposition applied to the Box-Cox transf
 ```{r warning=F, message=F}
 
 ```
+
+
+
+
 
 
 ```{r warning=F, message=F}
