@@ -78,7 +78,7 @@ int_95 <- c(lower_limit_95, upper_limit_95)
 int_95
 ```
 
-Above is the calculated lower and upper limite for the 95% confidence interval.
+Above is the calculated lower and upper limit for the 95% confidence interval.
 
 ```{r warning=F, message=F}
 # Determine the model forecast 95% intervals
@@ -351,7 +351,9 @@ fc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-Multiplicative seasonality is  necessary
+Multiplicative seasonality is necessary because as the Hyndman textbook points out "multiplicative method is preferred when the seasonal variations are changing proportional to the level of the series." As the initial data plot and the forecast data plot indicate, the seasonal nature of the time series increases proportional to the level of the series itself.
+
+I attempted 5 different ETS() based models. The purely forecasts without seasonality did not fare well at all. Based on the above answer, I'm also ignoring the forecast with the additive seasonality. So between the multiplicative seasonality forecasts with and without dampening, a small difference is visible with the dampening applied. I would argue the dampening does improve the forecast as the increasing trend is not a constant.
 
 # Exercise 8.8
 
@@ -363,14 +365,14 @@ set.seed(8675309)
 myseries <- aus_retail %>%
   filter(`Series ID` == sample(aus_retail$`Series ID`,1))
 
-head(myseries)
+autoplot(myseries)
 ```
 
 ## Section a
 
 Why is multiplicative seasonality necessary for this series?
 
-**Answer**: XXX
+**Answer**: As mentioned in the answer to Exercise 8.7, multiplicative seasonality is necessary because as the Hyndman textbook points out "multiplicative method is preferred when the seasonal variations are changing proportional to the level of the series." The retail time series displays increasing proportional seasonality as the level of the series increases.
 
 ## Section b
 
@@ -392,6 +394,8 @@ fc_ms %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+As expected, the damped method shows an increasing overall trend but not as constant as the straightforward Holt-Winters’ multiplicative method.
+
 ## Section c
 
 Compare the RMSE of the one-step forecasts from the two methods. Which do you prefer?
@@ -401,6 +405,8 @@ acc_fit <- accuracy(fit_ms)
 
 acc_fit
 ```
+
+The RMSE of the damped model is 6.52, which slightly outperforms the RMSE of 6.88 from the non-damped model. Given just this diagnostic for evaluation, I prefer the damped model.
 
 ## Section d
 
@@ -425,6 +431,8 @@ fit_msd <- myseries %>%
 fit_msd %>% gg_tsresiduals()
 ```
 
+The plot of the innovation residuals shows a plot that fits the definition of white noise of constant mean around zero and a near constant variance.
+
 ## Section e
 
 Now find the test set RMSE, while training the model to the end of 2010. Can you beat the seasonal naïve approach from Exercise 7 in Section 5.11?
@@ -434,6 +442,7 @@ Now find the test set RMSE, while training the model to the end of 2010. Can you
 myseries_train <- myseries %>%
   filter(year(Month) < 2011)
 
+# From the exercise 7 in Chapter 5
 # lambda from Assignment 2
 lambda <- 0.24
 
@@ -450,11 +459,13 @@ fc %>% autoplot(myseries)
 fit %>% accuracy()
 
 fc %>% accuracy(myseries)
+```
 
-# All above from the exercise in Chapter 5
+The RMSE of the previous exercise for the forecasted values is 27.6.
 
+```{r warning=F, message=F}
 fit_msd_train <- myseries_train %>%
-  model(ETS(Turnover ~ error("M") + trend("Ad") + season("M")))
+  model(ETS(Turnover ~ error("M") + trend("M") + season("M")))
 
 fc_msd <- fit_msd_train %>%
   forecast(new_data = anti_join(myseries, myseries_train))
@@ -466,6 +477,10 @@ fit_msd_train %>% accuracy()
 fc_msd %>% accuracy(myseries)
 ```
 
+Can I beat the seasonal naïve approach from Exercise 7? **Answer:** Nope. Unfortunately, I couldn't get the forecast to follow along the overall increasing trend of the data. By applying an ETS(M,A,M) model, the forecasted values started to follow a decreasing trend and resulted in an RMSE of 101.3121. By applying an ETS(M,Ad,M) model, the RMSE is better at 81.3 and the trend line did increase, but the increasing trend did not come close to the strong increase of the real data between 2010 and 2015. In the end, the seasonal naïve approach is victorious. 
+
+Even though the textbook didn't indicate the option "M" for the trend parameter of the ETS() function, I tried it anyway. So with an ETS(M,M,M) model, the RMSE resulted in 35.6 which far beat out the other two ETS() models and appears much closer to the seasonal naïve approach.
+
 # Exercise 8.9
 
 For the same retail data, try an STL decomposition applied to the Box-Cox transformed series, followed by ETS on the seasonally adjusted data. How does that compare with your best previous forecasts on the test set?
@@ -476,7 +491,11 @@ myseries_stl <- myseries_train %>%
   model(stl = STL(Turnover))
 
 components(myseries_stl) %>% autoplot()
+```
 
+Above is the STL decomposition applied to the raw (non-transformed) series.
+
+```{r warning=F, message=F}
 # STL on box-cox transformation
 myseries_stl_bc <- myseries_train %>% 
   model(stl = STL(box_cox(Turnover, lambda)))
@@ -484,6 +503,7 @@ myseries_stl_bc <- myseries_train %>%
 components(myseries_stl_bc) %>% autoplot()
 ```
 
+Above is the STL decomposition applied to the Box-Cox transformed series.
 
 ```{r warning=F, message=F}
 # Now apply the ETS
@@ -498,3 +518,4 @@ my_series_bc_ets_fc %>% autoplot(myseries)
 my_series_bc_ets_fc %>% accuracy(myseries)
 ```
 
+With the application of the ETS() function on the seasonally adjusted data via Box-Cox transformation, the visual result shows a forecast much more in-line with the actual data than compared to the results of the previous exercise. The calculated RMSE for the ETS approach on the transformed series is 30.0, much better than the results from the previous exercise. This RMSE is only slightly worse than the seasonal naïve approach at 27.6. Turns out the seasonal naïve approach is the best, at least so far.
