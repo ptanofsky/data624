@@ -101,7 +101,7 @@ fra_exports %>%
   guides(colour = "none")
 ```
 
-**Main features:** Overall, there appears to be an upward trend in the Exports, but I do not see any seasonality, not cyclic nature to the time series. Departing from the overall upward trend, a dip appears between 1960 and 1970. And dip occurs between 1985 and 1998. Also, a very distinct negative spike occurs bween 2008 and 2011.
+**Main features:** Overall, there appears to be an upward trend in the Exports, but I do not see any seasonality, not cyclic nature to the time series. Departing from the overall upward trend, a dip appears between 1960 and 1970. And dip occurs between 1985 and 1998. Also, a very distinct negative spike occurs between 2008 and 2011.
 
 ## Section b
 
@@ -377,7 +377,7 @@ aug_fit <- augment(fit_ms)
 fit_msd <- myseries %>%
   model(ETS(Turnover ~ error("M") + trend("Ad") + season("M")))
 
-fit_msd
+# fit_msd
 
 fit_msd %>% gg_tsresiduals()
 ```
@@ -387,7 +387,40 @@ fit_msd %>% gg_tsresiduals()
 Now find the test set RMSE, while training the model to the end of 2010. Can you beat the seasonal naïve approach from Exercise 7 in Section 5.11?
 
 ```{r warning=F, message=F}
+# Define training set
+myseries_train <- myseries %>%
+  filter(year(Month) < 2011)
 
+# lambda from Assignment 2
+lambda <- 0.24
+
+fit <- myseries_train %>%
+  model(SNAIVE(box_cox(Turnover, lambda) ~ drift()))
+
+# Check residuals
+fit %>% gg_tsresiduals()
+
+fc <- fit %>%
+  forecast(new_data = anti_join(myseries, myseries_train))
+fc %>% autoplot(myseries)
+
+fit %>% accuracy()
+
+fc %>% accuracy(myseries)
+
+# All above from the exercise in Chapter 5
+
+fit_msd_train <- myseries_train %>%
+  model(ETS(Turnover ~ error("M") + trend("Ad") + season("M")))
+
+fc_msd <- fit_msd_train %>%
+  forecast(new_data = anti_join(myseries, myseries_train))
+
+fc_msd %>% autoplot(myseries)
+
+fit_msd_train %>% accuracy()
+
+fc_msd %>% accuracy(myseries)
 ```
 
 # Exercise 8.9
@@ -395,19 +428,30 @@ Now find the test set RMSE, while training the model to the end of 2010. Can you
 For the same retail data, try an STL decomposition applied to the Box-Cox transformed series, followed by ETS on the seasonally adjusted data. How does that compare with your best previous forecasts on the test set?
 
 ```{r warning=F, message=F}
+# Initial STL decomposition on the data (no Box-Cox)
+myseries_stl <- myseries_train %>% 
+  model(stl = STL(Turnover))
 
+components(myseries_stl) %>% autoplot()
+
+# STL on box-cox transformation
+myseries_stl_bc <- myseries_train %>% 
+  model(stl = STL(box_cox(Turnover, lambda)))
+
+components(myseries_stl_bc) %>% autoplot()
 ```
 
 
 ```{r warning=F, message=F}
+# Now apply the ETS
+my_series_bc_ets_fit <- myseries_train %>%
+  model(ETS(box_cox(Turnover, lambda)))
 
+my_series_bc_ets_fc <- my_series_bc_ets_fit %>%
+  forecast(new_data = anti_join(myseries, myseries_train))
+
+my_series_bc_ets_fc %>% autoplot(myseries)
+
+my_series_bc_ets_fc %>% accuracy(myseries)
 ```
 
-
-
-
-
-
-```{r warning=F, message=F}
-
-```
