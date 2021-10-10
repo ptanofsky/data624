@@ -23,35 +23,43 @@ Use the `ETS()` function to estimate the equivalent model for simple exponential
 vic_pigs <- aus_livestock %>%
   filter(State == 'Victoria',
            Animal == 'Pigs')
-
-#head(vic_pigs)
-
 # Estimate parameters
 fit <- vic_pigs %>%
   model(ETS(Count ~ error("A") + trend("N") + season("N")))
 
+# Output model fit
 report(fit)
-
-fit
-
-fc <- fit %>%
-  forecast(h = 4)
 ```
 
-**Results:** $\alpha$ is 0.32 and $\ell_{0}$ is 100646.6
+**Results:** Optimal values based on the simple exponential smoothing of `ETS()` function are $\alpha$ equal to 0.32 and $\ell_{0}$ equal to 100646.6
 
 ```{r warning=F, message=F}
+fc <- fit %>%
+  forecast(h = 4)
+
+fc
+```
+
+Above output shows the forecasted value for the next 4 months, which is the same value: 95187.
+
+```{r warning=F, message=F}
+vic_pigs_2010 <- vic_pigs %>%
+  filter(year(Month) > 2009)
+
 fc %>%
-  autoplot(vic_pigs) +
+  autoplot(vic_pigs_2010) +
   labs(y="Count", title="Pigs Slaughtered: Victoria") +
   guides(colour = "none")
 ```
+
+The above plot shows the forecasted value for the next 4 months. Note: the data has been truncated so as to better show the forecasted values in context. Given the values are the same, the forecast line is horizontal.
 
 ## Section b
 
 Compute a 95% prediction interval for the first forecast using $\hat{y} \pm 1.96s$ where $s$ is the standard deviation of the residuals. Compare your interval with the interval produced by R.
 
 ```{r warning=F, message=F}
+# y-hat is the predicted value (.mean)
 y_hat <- mean(fc$.mean[1])
 
 # Apply augment function to get the residuals
@@ -66,9 +74,13 @@ lower_limit_95 <- y_hat - (s * 1.96)
 
 int_95 <- c(lower_limit_95, upper_limit_95)
 
-# Output calculate interval values
+# Output calculated interval values
 int_95
+```
 
+Above is the calculated lower and upper limite for the 95% confidence interval.
+
+```{r warning=F, message=F}
 # Determine the model forecast 95% intervals
 fc_hilo <- fc %>% hilo()
 
@@ -76,7 +88,9 @@ fc_hilo <- fc %>% hilo()
 fc_hilo$`95%`[1]
 ```
 
-The model low value is 16.22 lower than my calculated low interval value. The model high value is 16.2 higher than my calculate high interval value. It appears the model calculated values provide a slightly larger 95% prediction interval the calculations I performed. That being said, the intervals are very similar.
+Above is the interval produced by R.
+
+The model low value is 16.22 lower than my calculated low interval value. The model high value is 16.2 higher than my calculate high interval value. It appears the model calculated values provide a slightly larger 95% prediction interval than the calculations I performed. That being said, the intervals are very similar.
 
 # Exercise 8.5
 
@@ -90,18 +104,21 @@ fra_exports <- global_economy %>%
 head(fra_exports)
 ```
 
+Selected France for no particular reason besides it is not the United States and contains data for the entirety of the defined time series.
+
 ## Section a
 
 Plot the Exports series and discuss the main features of the data.
 
 ```{r warning=F, message=F}
+# Exports:	Exports of goods and services (% of GDP).
 fra_exports %>%
   autoplot(Exports) +
-  labs(y="Count", title="Exports: France") +
+  labs(y="% of GDP", title="Exports: France") +
   guides(colour = "none")
 ```
 
-**Main features:** Overall, there appears to be an upward trend in the Exports, but I do not see any seasonality, not cyclic nature to the time series. Departing from the overall upward trend, a dip appears between 1960 and 1970. And dip occurs between 1985 and 1998. Also, a very distinct negative spike occurs between 2008 and 2011.
+**Main features:** Overall, there appears to be an upward trend in the Exports, but I do not see any seasonality, nor cyclic nature to the time series. Departing from the overall upward trend, a dip appears between 1960 and 1970. And dip occurs between 1985 and 1998. Also, a very distinct negative spike occurs between 2008 and 2011.
 
 ## Section b
 
@@ -120,8 +137,14 @@ fc <- fit %>%
 
 fc %>%
   autoplot(fra_exports) +
-  labs(y="Count", title="Exports: France") +
+  labs(y="% of GDP", title="Exports: France") +
   guides(colour = "none")
+```
+
+Above plot shows the forecast for the next 10 years. The forecast value is 30.9(%) as noted below in the tsibble output.
+
+```{r warning=F, message=F}
+head(fc)
 ```
 
 ## Section c
@@ -133,6 +156,8 @@ fit_acc <- accuracy(fit)
 
 fit_acc
 ```
+
+The RMSE of the training data for the ETS(A,N,N) model is 1.15.
 
 ## Section d
 
@@ -146,6 +171,8 @@ fit_2_acc <- accuracy(fit_2)
 fit_2_acc
 ```
 
+The RMSE of the training data for the ETS(A,A,N) model is 1.12. A slightly better performance by the ETS(A,A,N) model over the ETS(A,N,N) model. Not a surprising result, as the ETS(A,A,N) model takes into account trending, which the initial plot of Exports clearly indicated.
+
 ## Section e
 
 Compare the forecasts from both methods. Which do you think is best?
@@ -157,9 +184,17 @@ fc_2 <- fit_2 %>%
 
 fc_2 %>%
   autoplot(fra_exports) +
-  labs(y="Count", title="Exports: France") +
+  labs(y="% of GDP", title="Exports: France") +
   guides(colour = "none")
 ```
+
+The above plot shows the forecasted values for the ETS(A,A,N) model.
+
+```{r warning=F, message=F}
+fc_2
+```
+
+As noted in Section B, the forecast values for the ETS(A,N,N) model is the same value 30.9 for every year forward. As the above plot and forecast values for the ETS(A,A,N) model shows, the forecasted values for ETS(A,A,N) increases due to the additive trend parameter. The constant increase for this model of 0.3 does visually appear more in line with the increasing trend of the Exports data.
 
 ## Section f
 
@@ -174,10 +209,12 @@ upper_limit_95_fc <- y_hat + (fit_acc$RMSE * 1.96)
 
 ets_ann_interval <- c(lower_limit_95_fc, upper_limit_95_fc)
 
-y_hat
 ets_ann_interval
+```
 
+Above is the calculated 95% interval for the ETS(A,N,N) model.
 
+```{r warning=F, message=F}
 # 95% prediction interval for the second forecast: ETS(A,A,N)
 y_hat_2 <- fc_2$.mean[1]
 
@@ -186,15 +223,22 @@ upper_limit_95_fc2 <- y_hat_2 + (fit_2_acc$RMSE * 1.96)
 
 ets_aan_interval <- c(lower_limit_95_fc2, upper_limit_95_fc2)
 
-y_hat_2
 ets_aan_interval
+```
 
+Above is the calculated 95% interval for the ETS(A,A,N) model.
+
+```{r warning=F, message=F}
 # Determine the model forecast 95% intervals
 fc_hilo <- fc %>% hilo()
 
 # Output model interval values
 fc_hilo$`95%`[1]
+```
 
+Above is the 95% interval for the ETS(A,N,N) model produced by R. The R produced values are 0.04 lower for the lower limit and 0.04 higher for the higher limit.
+
+```{r warning=F, message=F}
 # Determine the model forecast 95% intervals
 fc_2_hilo <- fc_2 %>% hilo()
 
@@ -202,21 +246,9 @@ fc_2_hilo <- fc_2 %>% hilo()
 fc_2_hilo$`95%`[1]
 ```
 
-```{r warning=F, message=F}
+Above is the 95% interval for the ETS(A,A,N) model produced by R. The R produced values are 0.08 lower for the lower limit and 0.08 higher for the higher limit.
 
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
+As noted in Exercise 8.1 the R produced confidence intervals appear a bit broader than the calculated values, but given the small differences, the calculated and R produced confidence intervals do appear in line with each other.
 
 # Exercise 8.6
 
@@ -239,6 +271,7 @@ chn_gdp %>%
   guides(colour = "none")
 ```
 
+Above plot shows the Chinese GDP for initial visual inspection and understanding of the data.
 
 ```{r warning=F, message=F}
 fit <- chn_gdp %>%
@@ -255,7 +288,11 @@ fc %>%
   autoplot(chn_gdp, level=NULL) +
   labs(y="Billions $USD", title="GDP: China") +
   guides(colour = guide_legend(title = "Forecast"))
+```
 
+Above plot shows the forecasted values for the next 20 years of the Chinese GDP. The simple exponential smoothing forecast, as expected, produces a horizontal line which doesn't appear to follow the increasing trend. The Holt forecast shows an increasing forecast with constant growth. And the Holt dampened forecast shows increasing trend that does slow over time. The Holt dampened forecast appears the most realistic of the three given it would be unlikely for the Chinese GDP to grow at a constant rate for 20 years.
+
+```{r warning=F, message=F}
 # Calculate lambda for Box-Cox
 lambda <- chn_gdp %>%
   features(GDP, features = guerrero) %>%
@@ -279,6 +316,10 @@ fc_bc %>%
          round(lambda,2)))) +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+Now, applying the Box-Cox transformation along with the ETS() function produces some interesting results. But first, in the not-so surprising result, the simple exponential smoothing model produced a horizontal line. The Holt approach produced a forecast that follows an exponential growth that clearly takes off after 5 years. The dampened method also starts to increase but not quite at the rate of the Holt method. 
+
+Given the 6 forecasts above, I personally would select the dampened method on the non-transformed data. I'm not expert on the Chinese economy, but the continue growth rate seems difficult to maintain according to the Hold method forecast.
 
 # Exercise 8.7
 
@@ -309,6 +350,8 @@ fc %>%
   labs(y="Petajoules", title="Gas Production: Australia") +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+Multiplicative seasonality is  necessary
 
 # Exercise 8.8
 
