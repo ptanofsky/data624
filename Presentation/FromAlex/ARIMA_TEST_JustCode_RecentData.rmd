@@ -89,7 +89,6 @@ fc %>%  autoplot(gdpdata) +
   labs(title="GDP ARIMA")
 ```
 
-
 ```{r}
 report(fit)
 ```
@@ -130,7 +129,11 @@ We perform 2 unit root tests: KPSS and ADF. Both confirm stationarity in this ca
 
 kpss_val = tseries::kpss.test(gdpdata$DGDP[2:88], null=c("Level"), lshort = FALSE)
 
+kpss_val
+
 adf_val = tseries::adf.test(gdpdata$DGDP[2:88], k = 3 )
+
+adf_val
 
 ```
 
@@ -171,7 +174,6 @@ ggsave("finalmodel_residuals.jpg", s)
 
 ```{r out.width="30%"}
 knitr::include_graphics(c("finalmodel_acf.jpg", "finalmodel_histogram.jpg", "finalmodel_residuals.jpg"))
-
 ```
 
 Residuals look like white noise.
@@ -202,7 +204,7 @@ df %>% kable(caption="Comparison of GDP Prediction", digits=2) %>%
 
 Clearly, ARIMA(12,1,0) produces the better forecast.
 
-# Forecast United Stated GDP since 2000
+# Forecast United States GDP since 2000
 
 ```{r warning=F, message=F}
 # Read in GDP recent
@@ -256,7 +258,7 @@ report(fit)
 ```
 
 
-```{r}
+```{r eval=F}
 # Set training data from 1970 to 2000
 train_2000 <- gdpdata %>%
   filter_index("1970 Q1" ~ "2000 Q4")
@@ -327,19 +329,22 @@ gdp_fc_2020 %>%
 tail(gdp_fc_2020)
 ```
 
+Filter on data for just the 21st century
+
 ```{r}
 # tsibble name to start: gdp_data_ts
-# 1. edit graph for this century-DD
 gdp_since_2000 <- gdp_data_ts %>%
   filter(year(Quarter) > 1999)
 
 # General plot of data since 2000 inclusive
 autoplot(gdp_since_2000)
+```
 
+Training set is time series through 2018
 
+Difference plot appears stationarity besides the 2008 dip
 
-# 2. new header for clarity-DD (see above )
-# 3. forecast through 2018
+```{r}
 # Define training data of 2000-2018
 gdp_train <- gdp_since_2000 %>%
   filter(year(Quarter) < 2019)
@@ -350,25 +355,55 @@ gdp_since_2000 %>%
   filter(year(Quarter) < 2019) %>% autoplot(difference(log(GDP), lag=1)) + 
   labs(title=  "First Diff - US GDP 2000-2021", subtitle="Indexed to 2012") +
   xlab("Year") + ylab("log(Diff($Trillions GDP))")
+```
 
+Visualize the ACF and PACF plots based on the GDP after 1 difference
+
+- ACF shows lag at 1 and 2 are correlated
+
+- PACF shows lag at 1 is correlated
+
+```{r}
 # Check ACF and PACF plots
 gdp_since_2000 %>%
   filter(year(Quarter) < 2019) %>%
   gg_tsdisplay( difference(GDP), plot_type='partial')
+```
 
+Fit the `fable` ARIMA model to the training set
+
+Output the residuals from the model
+
+```{r}
 # Fit ARIMA model
 gdp_fit <- gdp_train %>% model(ARIMA(log(GDP)))
 
 # Check residuals
 gdp_fit %>% gg_tsresiduals()
+```
 
+Output the model definition
+
+Results show ARIMA(1,1,0) with drift 
+
+AIC=-563.31 (the lower the better, even negative)
+
+```{r}
 # Output model
 report(gdp_fit)
 # without log on GDP, resulted in (1,1,0)
+```
 
+Check Ljung-Box test on residuals
+
+```{r}
 # Model residuals with Ljung-Box
 augment(gdp_fit) %>% features(.innov, ljung_box, lag=12, dof=2)
+```
 
+Forecast the data after 2018
+
+```{r}
 # Forecast
 gdp_fc <- gdp_fit %>%
   forecast(new_data = anti_join(gdp_since_2000, gdp_train))
@@ -378,55 +413,54 @@ gdp_fc %>% autoplot(gdp_since_2000)
 gdp_fit %>% accuracy()
 
 gdp_fc %>% accuracy(gdp_since_2000)
+```
 
-# 4. coefficients and diagnostics
-# - see if the same lags exist
-# - ACF of log differences and follow Alex's approach
-# 5. model residuals with ts residuals
-# 6. run box test, make sure residuals look like white noise
+Forecast results RMSE of 0.745
 
+```{r}
 ## Method 2
 gdp_since_2000$DGDP = difference(gdp_since_2000$GDP,lag=1)
 
-gdp_fit_2 <- arima(gdp_since_2000$DGDP[2:76], order = c(2, 0, 1), include.mean=TRUE)
+gdp_fit_2 <- arima(gdp_since_2000$DGDP[2:76], order = c(1, 0, 2), include.mean=TRUE)
 # Output result
 gdp_fit_2
+```
 
-kpss_val = tseries::kpss.test(gdp_since_2000$DGDP[2:76], null=c("Level"), lshort = FALSE)
+AIC=-151.74
 
-adf_val = tseries::adf.test(gdp_since_2000$DGDP[2:76], k = 3 )
+```{r}
+kpss_val <- tseries::kpss.test(gdp_since_2000$DGDP[2:76], null=c("Level"), lshort = FALSE)
+kpss_val
 
-
-ljung_box(gdp_fit_2$residuals, lag=12, dof=4)
-# use of a bad model:
-# failure of the economy over the 20 years
-
-
-
+adf_val <- tseries::adf.test(gdp_since_2000$DGDP[2:76], k = 3 )
+adf_val
 ```
 
 ```{r}
+ljung_box(gdp_fit_2$residuals, lag=12, dof=4)
+```
 
-model1_predh1 = (gdp_fc$.mean[1])
-model1_predh1
-model1_predh2 = (gdp_fc$.mean[2])
-model1_predh2
-model1_predh3 = (gdp_fc$.mean[3])
-model1_predh3
-model1_predh4 = (gdp_fc$.mean[4])
-model1_predh4
+```{r}
+model1_pred=c()
+model2_pred=c()
+gdp_actual=c()
 
-model2_predh1 = gdp_since_2000$GDP[76] +  predict(gdp_fit_2, 1 )$pred[1] 
-model2_predh1
-model2_predh2 = model2_predh1 +  predict(gdp_fit_2, 2 )$pred[2] 
-model2_predh2
-model2_predh3 = model2_predh2 +  predict(gdp_fit_2, 3 )$pred[3] 
-model2_predh3
-model2_predh4 = model2_predh3 +  predict(gdp_fit_2, 4 )$pred[4] 
-model2_predh4
+for (i in 1:4) {
+  model1_pred[i] = (gdp_fc$.mean[i])
+  
+  if (i == 1) {
+    model2_pred[i] = gdp_since_2000$GDP[76] +  predict(gdp_fit_2, i )$pred[i] 
+  } else {
+    model2_pred[i] = model2_pred[i-1] +  predict(gdp_fit_2, i )$pred[i] 
+  }
+  
+  gdp_actual[i] = gdp_since_2000$GDP[76+i]
+}
 
-gdp_since_2000$GDP[77]
-gdp_since_2000$GDP[78]
-gdp_since_2000$GDP[79]
-gdp_since_2000$GDP[80]
+values_2019 <- data.frame(ARIMA_Fable=model1_pred, ARIMA_Manual=model2_pred, GDP_Values=gdp_actual)
+
+values_2019$Fable_Err_Pct  <- 100 * (1 - values_2019$ARIMA_Fable  / values_2019$GDP_Values)
+values_2019$Manual_Err_Pct <- 100 * (1 - values_2019$ARIMA_Manual / values_2019$GDP_Values)
+
+values_2019
 ```
