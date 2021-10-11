@@ -14,13 +14,9 @@ library(readr)
 library(kableExtra)
 ```
 
-## GDP DATA EXAMPLE
+# GDP Data Example
 
-### Read in text file
-
-### Create tsibble with YEAR column as index (quarterly data)
-
-Plot data with autoplot
+Read in data and plot with autoplot()
 
 ```{r figgdp, fig.width=5, fig.asp = .62}
 rawdata = read_table("Table 21.1.txt", 
@@ -39,8 +35,6 @@ econdata %>% autoplot(GDP) +
   xlab("Year") + ylab("$Billions GDP")
 ```
 
-## GDP DATA EXAMPLE 2
-
 Take log of GDP, plot data with autoplot()
 
 ```{r figgdpdiff, fig.width=5, fig.asp = .62, warning=FALSE}
@@ -50,9 +44,6 @@ econdata %>%  autoplot(difference(log(GDP), lag=1)) +
   xlab("Year") + ylab("log(Diff($Billions GDP))")
 
 econdata %>% dplyr::select(YEAR, GDP) %>% mutate( logGDP = log(GDP)) -> gdpdata
-
-gdpdata
-
 ```
 
 ### Generate model with fable ARIMA function
@@ -61,19 +52,14 @@ ARIMA(1,1,0) with drift
 
 ```{r}
 fit <- gdpdata %>% model(ARIMA(logGDP))
-
 ```
 
-## Checking ACF and PACF Plots
+### Checking ACF and PACF Plots
 
 gg_tsdisplay() straight from the book
 
-Check differences and ACF/PACF
-
 ```{r fig.width=5, fig.asp = .62, warning=FALSE}
-
 gdpdata %>% gg_tsdisplay( difference(logGDP), plot_type='partial')
-
 ```
 
 ## Approach 1: Automated Model Selection
@@ -93,7 +79,7 @@ fc %>%  autoplot(gdpdata) +
 report(fit)
 ```
 
-## Approach 1: Model Diagnostics - Bad News
+### Approach 1: Model Diagnostics 
 
 The residuals of the ARIMA(1,1,0) model don't look like white noise.
 
@@ -101,7 +87,7 @@ The residuals of the ARIMA(1,1,0) model don't look like white noise.
 fit %>% gg_tsresiduals()
 ```
 
-## Approach 1: Model Diagnostics - Formal Test
+### Approach 1: Model Diagnostics - Formal Test
 
 Model residuals fail the Ljung-Box test and showed significant autocorrelations at 8 and 12 quarters.
 
@@ -113,7 +99,7 @@ augment(fit) %>% features(.innov, ljung_box, lag=12, dof=2)
 
 For this example, use `arima` in `stats` library instead of `fable`.
 
-## Approach 2: ARIMA Model Specification
+### Approach 2: ARIMA Model Specification
 
 ```{r warning=FALSE}
 gdpdata$DGDP = difference(gdpdata$GDP,lag=1)
@@ -137,13 +123,13 @@ adf_val
 
 ```
 
--   Residuals pass the white noise test (Ljung-Box): $p-\text{value}(LB) = 0.56$
+Residuals pass the white noise test (Ljung-Box): $p-\text{value}(LB) = 0.56$
 
 ```{r}
 ljung_box(modDGDP$residuals, lag=12, dof=4)
 ```
 
-## Approach 2: GDP Model Diagnostic Plots
+### Approach 2: GDP Model Diagnostic Plots
 
 ```{r warning=FALSE, message=FALSE, fig.width=4, fig.asp=1.2}
 
@@ -162,14 +148,9 @@ r <- ggplot(data=diag_modgdp) + geom_histogram(aes(x=residuals)) + ggtitle("Resi
 
 s <- ggplot(data=diag_modgdp) + geom_line(aes(x=YEAR,y=residuals)) + ggtitle("Residuals Time Series")
 
-#plot(diag_modgdp$YEAR, diag_modgdp$residuals) 
-#hist(diag_modgdp$residuals, main="Residuals")
-
 ggsave("finalmodel_acf.jpg", q)
 ggsave("finalmodel_histogram.jpg", r)
 ggsave("finalmodel_residuals.jpg", s)
-
-
 ```
 
 ```{r out.width="30%"}
@@ -178,7 +159,7 @@ knitr::include_graphics(c("finalmodel_acf.jpg", "finalmodel_histogram.jpg", "fin
 
 Residuals look like white noise.
 
-## Let's compare Predictions of both GDP Models
+### Compare Predictions of both GDP Models
 
 Look 1 quarter ahead GDP forecast for Q1 1992 using these models.
 
@@ -189,7 +170,7 @@ model2_predh1 = gdpdata$GDP[88] +  predict(modDGDP, 1 )$pred[1]
 
 actual_gdp = 4873.7
 
-df = data.frame(model=c("ARIMA(1,1,0", "ARIMA(12,1,0)"),
+df = data.frame(model=c("ARIMA(1,1,0)", "ARIMA(12,1,0)"),
                 source = c("fable algo", "manual expert") ,
                 prediction = c( model1_predh1, model2_predh1) ,
                 error_pct = 100 * c( ( model1_predh1 / actual_gdp) - 1, (model2_predh1 / actual_gdp) -1 ) ,
@@ -204,7 +185,7 @@ df %>% kable(caption="Comparison of GDP Prediction", digits=2) %>%
 
 Clearly, ARIMA(12,1,0) produces the better forecast.
 
-# Forecast United States GDP since 2000
+# Forecast United States GDP: 21st Century
 
 ```{r warning=F, message=F}
 # Read in GDP recent
@@ -235,9 +216,6 @@ gdp_data_ts <- gdp_data %>% select(c(Quarter, GDP)) %>%
   mutate(Quarter = yearquarter(Quarter)) %>%
   as_tsibble(index=Quarter)
 
-# Output for tsibble format confirmation
-tail(gdp_data_ts)
-
 # Simple visualization
 gdp_data_ts %>% autoplot(GDP) + 
   labs(title="US GDP 1970-2021", subtitle="Indexed to 2012 and Seasonally Adjusted") +
@@ -246,87 +224,9 @@ gdp_data_ts %>% autoplot(GDP) +
 ```
 
 
-```{r}
+```{r eval=F}
 # Calculate log of GDP
 gdp_data_ts %>% mutate( logGDP = log(GDP)) -> gdpdata
-
-gdpdata
-
-# Generate ARIMA model
-fit <- gdpdata %>% model(ARIMA(logGDP))
-report(fit)
-```
-
-
-```{r eval=F}
-# Set training data from 1970 to 2000
-train_2000 <- gdpdata %>%
-  filter_index("1970 Q1" ~ "2000 Q4")
-
-# Set training data from 1970 to 2010
-train_2010 <- gdpdata %>%
-  filter_index("1970 Q1" ~ "2010 Q4")
-
-# Set training data from 1970 to 2020
-train_2020 <- gdpdata %>%
-  filter_index("1970 Q1" ~ "2020 Q4")
-
-# Fit the models
-gdp_fit_2000 <- train_2000 %>% model(ARIMA(GDP))
-gdp_fit_2010 <- train_2010 %>% model(ARIMA(GDP))
-gdp_fit_2020 <- train_2020 %>% model(ARIMA(GDP))
-
-# Generate forecasts for 21 years
-gdp_fc_2000 <- gdp_fit_2000 %>% forecast(h = 84)
-# Generate forecasts for 11 years
-gdp_fc_2010 <- gdp_fit_2010 %>% forecast(h = 44)
-# Generate forecasts for 1 year
-gdp_fc_2020 <- gdp_fit_2020 %>% forecast(h = 4)
-
-# Plot forecasts against actual values
-gdp_fc_2000 %>%
-  autoplot(train_2000) +
-  autolayer(
-    filter_index(gdpdata, "2001 Q1" ~ .),
-    colour = "black"
-  ) +
-  labs(
-    y = "Trillions",
-    title = "Forecasts for US GDP"
-  ) +
-  guides(colour = guide_legend(title = "Forecast"))
-
-tail(gdp_fc_2000)
-
-# Plot forecasts against actual values
-gdp_fc_2010 %>%
-  autoplot(train_2010) +
-  autolayer(
-    filter_index(gdpdata, "2011 Q1" ~ .),
-    colour = "black"
-  ) +
-  labs(
-    y = "Trillions",
-    title = "Forecasts for US GDP"
-  ) +
-  guides(colour = guide_legend(title = "Forecast"))
-
-tail(gdp_fc_2010)
-
-# Plot forecasts against actual values
-gdp_fc_2020 %>%
-  autoplot(train_2020) +
-  autolayer(
-    filter_index(gdpdata, "2021 Q1" ~ .),
-    colour = "black"
-  ) +
-  labs(
-    y = "Trillions",
-    title = "Forecasts for US GDP"
-  ) +
-  guides(colour = guide_legend(title = "Forecast"))
-
-tail(gdp_fc_2020)
 ```
 
 Filter on data for just the 21st century
@@ -345,7 +245,7 @@ gdp_since_2000 %>% autoplot(GDP) +
 
 Construct training set based on 2000 through 2018
 
-Difference plot appears stationarity besides the 2008 dip
+Difference plot follows stationarity besides the 2008 dip
 
 ```{r}
 # Define training data of 2000-2018
@@ -408,7 +308,7 @@ Check Ljung-Box test on residuals
 
 - p-value is too high to reject the null hypothesis, thus we cannot assume the values are dependent on each other.
 
-from the textbook: A portmanteau test returns a large p-value, also suggesting that the residuals are white noise.
+- Hyndman textbook: If the test returns a large p-value, then suggests that the residuals are white noise.
 
 ```{r}
 # Model residuals with Ljung-Box
@@ -450,15 +350,13 @@ gdp_fit_2
 
 Model results in AIC=-151.74 which is more than the fable ARIMA model.
 
---> Continue here with the notes
-
 KPSS: Null hypothesis that data is stationary
 
 - p-value is .1 so can't reject null hypothesis
 
 ADF: Null hypothesis is that there is a unit root
 
-- alternate hypo: time series is stationary
+- alternate hypothesis: time series is stationary
 
 - p-value is .03, so reject null hypothesis
 
@@ -470,27 +368,22 @@ adf_val <- tseries::adf.test(gdp_since_2000$DGDP[2:76], k = 3 )
 adf_val
 ```
 
+Check Ljung-Box test on residuals
 
+- p-value is too high to reject the null hypothesis, thus we cannot assume the values are dependent on each other.
 
 ```{r}
 ljung_box(gdp_fit_2$residuals, lag=12, dof=4)
 ```
 
-```{r}
-head(gdp_since_2000)
-```
+Visualize the manual model residuals
 
 ```{r warning=FALSE, message=FALSE, fig.width=4, fig.asp=1.2}
 # Visualize the manual model residuals
-# NEED TO UPDATE
 diag_modgdp = data.frame( YEAR =  gdp_since_2000$Quarter[2:76], residuals = gdp_fit_2$residuals, DGDP = gdp_since_2000$DGDP[2:76] )
 
-
 acf_data = acf(diag_modgdp$residuals, plot=FALSE)
-
 df_acfdata = with(acf_data, data.frame(lag, acf))
-
-
 
 q <- ggplot(data=df_acfdata, aes(x=lag,y=acf)) + geom_hline(aes(yintercept=0)) + geom_segment(aes(xend=lag,yend=0)) +
    geom_hline(yintercept=.25, col="blue", linetype=2) + 
@@ -500,21 +393,17 @@ r <- ggplot(data=diag_modgdp) + geom_histogram(aes(x=residuals)) + ggtitle("Resi
 
 s <- ggplot(data=diag_modgdp) + geom_line(aes(x=YEAR,y=residuals)) + ggtitle("Residuals Time Series")
 
-#plot(diag_modgdp$YEAR, diag_modgdp$residuals) 
-#hist(diag_modgdp$residuals, main="Residuals")
-
 ggsave("finalmodel_acf_2.jpg", q)
 ggsave("finalmodel_histogram_2.jpg", r)
 ggsave("finalmodel_residuals_2.jpg", s)
-
-
 ```
 
 ```{r out.width="30%"}
 # Plot the visuals
-# NEED TO UPDATE
 knitr::include_graphics(c("finalmodel_acf_2.jpg", "finalmodel_histogram_2.jpg", "finalmodel_residuals_2.jpg"))
 ```
+
+Output forecasted values for 2019
 
 ```{r}
 model1_pred=c()
@@ -538,5 +427,6 @@ values_2019 <- data.frame(ARIMA_Fable=model1_pred, ARIMA_Manual=model2_pred, GDP
 values_2019$Fable_Err_Pct  <- 100 * (1 - values_2019$ARIMA_Fable  / values_2019$GDP_Values)
 values_2019$Manual_Err_Pct <- 100 * (1 - values_2019$ARIMA_Manual / values_2019$GDP_Values)
 
-values_2019
+values_2019 %>% kable(caption="Comparison of GDP Prediction", digits=2) %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
 ```
