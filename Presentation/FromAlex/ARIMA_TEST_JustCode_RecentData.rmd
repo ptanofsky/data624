@@ -337,10 +337,13 @@ gdp_since_2000 <- gdp_data_ts %>%
   filter(year(Quarter) > 1999)
 
 # General plot of data since 2000 inclusive
-autoplot(gdp_since_2000)
+gdp_since_2000 %>% autoplot(GDP) + 
+  labs(title="US GDP 2000-2021", subtitle="Indexed to 2012 and Seasonally Adjusted") +
+  xlab("Year") + 
+  ylab("$Trillions GDP")
 ```
 
-Training set is time series through 2018
+Construct training set based on 2000 through 2018
 
 Difference plot appears stationarity besides the 2008 dip
 
@@ -353,17 +356,19 @@ gdp_train <- gdp_since_2000 %>%
 # Result diff with 2008 implies not exactly white noise
 gdp_since_2000 %>%
   filter(year(Quarter) < 2019) %>% autoplot(difference(log(GDP), lag=1)) + 
-  labs(title=  "First Diff - US GDP 2000-2021", subtitle="Indexed to 2012") +
+  labs(title=  "First Difference - US GDP 2000-2021") +
   xlab("Year") + ylab("log(Diff($Trillions GDP))")
 ```
 
 Visualize the ACF and PACF plots based on the GDP after 1 difference
 
-- ACF shows lag at 1 and 2 are correlated
+- ACF shows lag at 1 and lag 2 are correlated to the current year
 
-- PACF shows lag at 1 is correlated
+- PACF shows lag at 1 is correlated to the current year
 
-```{r}
+- Again, despite the 2008 dip, the data does appear to have stationarity
+
+```{r warning=FALSE}
 # Check ACF and PACF plots
 gdp_since_2000 %>%
   filter(year(Quarter) < 2019) %>%
@@ -373,6 +378,12 @@ gdp_since_2000 %>%
 Fit the `fable` ARIMA model to the training set
 
 Output the residuals from the model
+
+- Residuals appear similar to white noise
+
+- No correlation based on ACF plot
+
+- Histogram shows near normal distribution with the outliers causing left skew
 
 ```{r}
 # Fit ARIMA model
@@ -391,19 +402,24 @@ AIC=-563.31 (the lower the better, even negative)
 ```{r}
 # Output model
 report(gdp_fit)
-# without log on GDP, resulted in (1,1,0)
 ```
 
 Check Ljung-Box test on residuals
+
+- p-value is too high to reject the null hypothesis, thus we cannot assume the values are dependent on each other.
+
+from the textbook: A portmanteau test returns a large p-value, also suggesting that the residuals are white noise.
 
 ```{r}
 # Model residuals with Ljung-Box
 augment(gdp_fit) %>% features(.innov, ljung_box, lag=12, dof=2)
 ```
 
-Forecast the data after 2018
+### Forecast the data after 2018
 
-```{r}
+Forecast appears to follow an upward trend similar to the plot from 2000-2018
+
+```{r warning=FALSE, error=FALSE}
 # Forecast
 gdp_fc <- gdp_fit %>%
   forecast(new_data = anti_join(gdp_since_2000, gdp_train))
@@ -415,7 +431,13 @@ gdp_fit %>% accuracy()
 gdp_fc %>% accuracy(gdp_since_2000)
 ```
 
-Forecast results RMSE of 0.745
+Training set results: RMSE of 0.0827
+
+Forecast results: RMSE of 0.745
+
+## Model 2: Manual approach
+
+Use `arima()` from the stats library.
 
 ```{r}
 ## Method 2
@@ -426,9 +448,11 @@ gdp_fit_2 <- arima(gdp_since_2000$DGDP[2:76], order = c(1, 0, 2), include.mean=T
 gdp_fit_2
 ```
 
-AIC=-151.74
+Model results in AIC=-151.74 which is more than the fable ARIMA model.
 
-```{r}
+--> Continue here with the notes
+
+```{r warning=FALSE}
 kpss_val <- tseries::kpss.test(gdp_since_2000$DGDP[2:76], null=c("Level"), lshort = FALSE)
 kpss_val
 
@@ -438,6 +462,46 @@ adf_val
 
 ```{r}
 ljung_box(gdp_fit_2$residuals, lag=12, dof=4)
+```
+
+```{r}
+head(gdp_since_2000)
+```
+
+```{r warning=FALSE, message=FALSE, fig.width=4, fig.asp=1.2}
+# Visualize the manual model residuals
+# NEED TO UPDATE
+diag_modgdp = data.frame( YEAR =  gdp_since_2000$Quarter[2:76], residuals = gdp_fit_2$residuals, DGDP = gdp_since_2000$DGDP[2:76] )
+
+
+acf_data = acf(diag_modgdp$residuals, plot=FALSE)
+
+df_acfdata = with(acf_data, data.frame(lag, acf))
+
+
+
+q <- ggplot(data=df_acfdata, aes(x=lag,y=acf)) + geom_hline(aes(yintercept=0)) + geom_segment(aes(xend=lag,yend=0)) +
+   geom_hline(yintercept=.25, col="blue", linetype=2) + 
+   geom_hline(yintercept=-.25, col="blue", linetype=2) + ggtitle("Residuals ACF")
+
+r <- ggplot(data=diag_modgdp) + geom_histogram(aes(x=residuals)) + ggtitle("Residuals Histogram")
+
+s <- ggplot(data=diag_modgdp) + geom_line(aes(x=YEAR,y=residuals)) + ggtitle("Residuals Time Series")
+
+#plot(diag_modgdp$YEAR, diag_modgdp$residuals) 
+#hist(diag_modgdp$residuals, main="Residuals")
+
+ggsave("finalmodel_acf_2.jpg", q)
+ggsave("finalmodel_histogram_2.jpg", r)
+ggsave("finalmodel_residuals_2.jpg", s)
+
+
+```
+
+```{r out.width="30%"}
+# Plot the visuals
+# NEED TO UPDATE
+knitr::include_graphics(c("finalmodel_acf_2.jpg", "finalmodel_histogram_2.jpg", "finalmodel_residuals_2.jpg"))
 ```
 
 ```{r}
