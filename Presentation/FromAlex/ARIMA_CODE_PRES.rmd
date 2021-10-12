@@ -219,7 +219,7 @@ gdp_data_ts <- gdp_data %>% select(c(Quarter, GDP)) %>%
 # Simple visualization
 gdp_data_ts %>% autoplot(GDP) + 
   labs(title="US GDP 1970-2021", subtitle="Indexed to 2012 and Seasonally Adjusted") +
-  xlab("Year") + 
+  xlab("Quarter`") + 
   ylab("$Trillions GDP")
 ```
 
@@ -231,6 +231,8 @@ gdp_data_ts %>% mutate( logGDP = log(GDP)) -> gdpdata
 
 Filter on data for just the 21st century
 
+Notice the dip for 2008 and the clear downward spike for Covid-19 in 2020.
+
 ```{r}
 # tsibble name to start: gdp_data_ts
 gdp_since_2000 <- gdp_data_ts %>%
@@ -239,8 +241,8 @@ gdp_since_2000 <- gdp_data_ts %>%
 # General plot of data since 2000 inclusive
 gdp_since_2000 %>% autoplot(GDP) + 
   labs(title="US GDP 2000-2021", subtitle="Indexed to 2012 and Seasonally Adjusted") +
-  xlab("Year") + 
-  ylab("$Trillions GDP")
+  xlab("Quarter") + 
+  ylab("$Trillions")
 ```
 
 Construct training set based on 2000 through 2018
@@ -257,7 +259,7 @@ gdp_train <- gdp_since_2000 %>%
 gdp_since_2000 %>%
   filter(year(Quarter) < 2019) %>% autoplot(difference(log(GDP), lag=1)) + 
   labs(title=  "First Difference - US GDP 2000-2021") +
-  xlab("Year") + ylab("log(Diff($Trillions GDP))")
+  xlab("Quarter") + ylab("log(Diff($Trillions GDP))")
 ```
 
 Visualize the ACF and PACF plots based on the GDP after 1 difference
@@ -319,12 +321,19 @@ augment(gdp_fit) %>% features(.innov, ljung_box, lag=12, dof=2)
 
 Forecast appears to follow an upward trend similar to the plot from 2000-2018
 
+Goal is to focus the forecast on the four quarters of 2019 before the plot falls off a cliff in 2020 due to Covid-19.
+
 ```{r warning=FALSE, error=FALSE}
 # Forecast
 gdp_fc <- gdp_fit %>%
   forecast(new_data = anti_join(gdp_since_2000, gdp_train))
 
-gdp_fc %>% autoplot(gdp_since_2000)
+gpd_since_2008 <- gdp_since_2000 %>%
+  filter(year(Quarter) > 2007)
+
+gdp_fc %>% autoplot(gpd_since_2008) + 
+  labs(title=  "US GDP 2008-2021 with ARIMA Forecast") +
+  xlab("Quarter") + ylab("$Trillions")
 
 gdp_fit %>% accuracy()
 
@@ -422,11 +431,14 @@ for (i in 1:4) {
   gdp_actual[i] = gdp_since_2000$GDP[76+i]
 }
 
-values_2019 <- data.frame(ARIMA_Fable=model1_pred, ARIMA_Manual=model2_pred, GDP_Values=gdp_actual)
+interval <- gdp_since_2000$Quarter[76:79]
 
-values_2019$Fable_Err_Pct  <- 100 * (1 - values_2019$ARIMA_Fable  / values_2019$GDP_Values)
-values_2019$Manual_Err_Pct <- 100 * (1 - values_2019$ARIMA_Manual / values_2019$GDP_Values)
+values_2019 <- data.frame(Quarter=interval, ARIMA.Fable=model1_pred, ARIMA.Manual=model2_pred, Actual.GDP=gdp_actual)
+
+values_2019$Fable.Error.Pct  <- 100 * (1 - values_2019$ARIMA.Fable  / values_2019$Actual.GDP)
+values_2019$Manual.Error.Pct <- 100 * (1 - values_2019$ARIMA.Manual / values_2019$Actual.GDP)
 
 values_2019 %>% kable(caption="Comparison of GDP Prediction", digits=2) %>%
   kable_styling(bootstrap_options = c("hover", "striped"))
 ```
+
