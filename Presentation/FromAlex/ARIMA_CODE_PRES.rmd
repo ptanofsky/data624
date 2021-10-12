@@ -431,7 +431,7 @@ for (i in 1:4) {
   gdp_actual[i] = gdp_since_2000$GDP[76+i]
 }
 
-interval <- gdp_since_2000$Quarter[76:79]
+interval <- gdp_since_2000$Quarter[77:80]
 
 values_2019 <- data.frame(Quarter=interval, ARIMA.Fable=model1_pred, ARIMA.Manual=model2_pred, Actual.GDP=gdp_actual)
 

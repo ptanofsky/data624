@@ -631,7 +631,7 @@ for (i in 1:4) {
   gdp_actual[i] = gdp_since_2000$GDP[76+i]
 }
 
-interval &lt;- gdp_since_2000$Quarter[76:79]
+interval &lt;- gdp_since_2000$Quarter[77:80]
 
 values_2019 &lt;- data.frame(Quarter=interval, ARIMA.Fable=model1_pred, ARIMA.Manual=model2_pred, Actual.GDP=gdp_actual)
 
@@ -669,7 +669,7 @@ Manual.Error.Pct
 <tbody>
 <tr>
 <td style="text-align:left;">
-2018 Q4
+2019 Q1
 </td>
 <td style="text-align:right;">
 18.79
@@ -689,7 +689,7 @@ Manual.Error.Pct
 </tr>
 <tr>
 <td style="text-align:left;">
-2019 Q1
+2019 Q2
 </td>
 <td style="text-align:right;">
 18.88
@@ -709,7 +709,7 @@ Manual.Error.Pct
 </tr>
 <tr>
 <td style="text-align:left;">
-2019 Q2
+2019 Q3
 </td>
 <td style="text-align:right;">
 18.98
@@ -729,7 +729,7 @@ Manual.Error.Pct
 </tr>
 <tr>
 <td style="text-align:left;">
-2019 Q3
+2019 Q4
 </td>
 <td style="text-align:right;">
 19.07
