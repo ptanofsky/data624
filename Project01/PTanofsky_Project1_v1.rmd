@@ -13,6 +13,8 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r warning=F, message=F}
 # Import required R libraries
 library(fpp3)
+library(tidyverse)
+library(readxl)
 ```
 
 This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday Apr 11.  I will accept late submissions with a penalty until the meetup after that when we review some projects.
@@ -21,11 +23,59 @@ This project consists of 3 parts - two required and one bonus and is worth 15% o
 
 - Dataset: ATM624Data.xlsx
 
-In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010.  The data is given in a single file.  The variable ‘Cash’ is provided in hundreds of dollars, other than that it is straight forward.   I am being somewhat ambiguous on purpose to make this have a little more business feeling.  Explain and demonstrate your process, techniques used and not used, and your actual forecast.  I am giving you data via an excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file  Also please submit the forecast which you will put in an Excel readable file.
+In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010.  The data is given in a single file.  The variable `Cash` is provided in hundreds of dollars, other than that it is straight forward. I am being somewhat ambiguous on purpose to make this have a little more business feeling. Explain and demonstrate your process, techniques used and not used, and your actual forecast. I am giving you data via an Excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file  Also please submit the forecast which you will put in an Excel readable file.
 
 ```{r warning=F, message=F}
+# Read in data
+# xlsx_example <- readxl_example("datasets.xlsx")
+atm_data_raw <- read_excel("data/ATM624Data.xlsx")
 
+head(atm_data_raw)
+
+summary(atm_data_raw)
+
+dim(atm_data_raw)
+# 1474    3
+#Cash in hundreds
+
+atm_data_ts <- atm_data_raw %>%
+  as_tsibble(index = DATE, key = ATM)
+
+atm_data_ts %>%
+#  filter(ATM == 'ATM1') %>%
+  autoplot(Cash)
+
+#atm_data_ts %>% print(n = Inf)
 ```
+
+Summary output
+      DATE           ATM                 Cash        
+ Min.   :39934   Length:1474        Min.   :    0.0  
+ 1st Qu.:40026   Class :character   1st Qu.:    0.5  
+ Median :40118   Mode  :character   Median :   73.0  
+ Mean   :40118                      Mean   :  155.6  
+ 3rd Qu.:40210                      3rd Qu.:  114.0  
+ Max.   :40312                      Max.   :10919.8  
+                                    NA's   :19       
+
+Date 39934 to 40312
+
+379 dates
+
+ATM1, ATM2, ATM3, ATM4, NA
+
+Cash 19 NA's
+
+Data observations:
+ATM1: 3 Cash NA values
+ATM2: 2 Cash NA values
+ATM3: Only 3 Cash values with something above zero
+ATM4: Many Cash values with a decimal, but not all, something weird there, also ATM4 appears to have 1 really crazy outlier
+Final 14 entries are NA, NA (DATE of 40299 and higher are NA, NA)
+
+Dimensions output
+[1] 1474    3
+
 
 # Part B – Forecasting Power
 
@@ -34,8 +84,38 @@ In part A, I want you to forecast how much cash is taken out of 4 different ATM 
 Part B consists of a simple dataset of residential power usage for January 1998 until December 2013.  Your assignment is to model these data and a monthly forecast for 2014.  The data is given in a single file.  The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward.    Add this to your existing files above. 
 
 ```{r warning=F, message=F}
+# Read in data
+power_data_raw <- read_excel("data/ResidentialCustomerForecastLoad-624.xlsx")
 
+# Change column name to 'Month'
+names(power_data_raw)[names(power_data_raw) == 'YYYY-MMM'] <- 'Month'
+
+head(power_data_raw)
+
+summary(power_data_raw)
+
+dim(power_data_raw)
+# 192   3
+# KWH
+
+power_data_ts <- power_data_raw %>%
+  mutate(Month = yearmonth(Month)) %>%
+  mutate(KWH = KWH/1e3) %>% # In thousands
+  as_tsibble(index = Month)
+
+head(power_data_ts)
+
+power_data_ts %>%
+  autoplot(KWH)
+
+power_data_ts %>%
+  filter_index("2010" ~ "2011") %>%
+  print()
 ```
+
+First observations, data is Monthly, so I'd expect a seasonal component.
+1 month is missing KWH has 1 NA value (2008 Sep) Considering imputing with median Sep Value
+Outlier (with very small value in July 2010) Considering imputing with median Jul Value
 
 # Part C – Waterflow (optional)
 
