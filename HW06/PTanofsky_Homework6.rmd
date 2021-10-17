@@ -157,6 +157,7 @@ tas_takings %>%
   features(difference(difference(box_cox(Takings, lambda), 4), 1), ljung_box, lag = 12)
 
 ## NOT THE RESULT I WANT, DOUBLE-CHECK ##
+## unitroot_nsdiffs() from section 9.1 instead of ljung-box test
 
 tas_takings %>%
   ACF(difference(difference(box_cox(Takings, lambda), 4), 1)) %>%
@@ -211,6 +212,7 @@ souvenirs %>%
   features(difference(difference(box_cox(Sales, lambda), 12), 1), ljung_box, lag = 12)
 
 ## NOT THE RESULT I WANT, DOUBLE-CHECK ##
+## unitroot_nsdiffs() from section 9.1 instead of ljung-box test
 ```
 
 # Exercise 9.5
