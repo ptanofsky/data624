@@ -37,7 +37,25 @@ Why are the critical values at different distances from the mean of zero? Why ar
 A classic example of a non-stationary series are stock prices. Plot the daily closing prices for Amazon stock (contained in `gafa_stock`), along with the ACF and PACF. Explain how each plot shows that the series is non-stationary and should be differenced.
 
 ```{r warning=F, message=F}
+gafa_stock %>%
+  filter(Symbol == 'AMZN') %>%
+  autoplot(Close) +
+  labs(title = "Amazon Daily Closing Stock Price",
+       y = "Price")
+```
 
+```{r warning=F, message=F}
+gafa_stock %>%
+  filter(Symbol == "AMZN") %>%
+  ACF(Close) %>%
+  autoplot()
+```
+
+```{r warning=F, message=F}
+gafa_stock %>%
+  filter(Symbol == "AMZN") %>%
+  PACF(Close) %>%
+  autoplot()
 ```
 
 # Exercise 9.3
@@ -49,15 +67,100 @@ For the following series, find an appropriate Box-Cox transformation and order o
 Turkish GDP from `global_economy`.
 
 ```{r warning=F, message=F}
+turkey_gdp <- global_economy %>%
+  filter(Country == 'Turkey')
 
+lambda <- turkey_gdp %>%
+  features(GDP, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+turkey_gdp %>%
+  autoplot(box_cox(GDP, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed Turkish GDP with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
+Appears to have an increasing trend after Box-Cox transformation. Attempt first differencing.
+
+```{r warning=F, message=F}
+turkey_gdp <- turkey_gdp %>%
+  mutate(diff_bc_gdp = difference(box_cox(GDP, lambda)))
+
+# Display plot of first difference
+turkey_gdp %>%
+  autoplot(diff_bc_gdp) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed Turkish GDP with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
+```{r warning=F, message=F}
+# Apply Ljung-Box test
+turkey_gdp %>%
+  features(diff_bc_gdp, ljung_box, lag = 10)
 ```
 
 ### Section b
 
 Accommodation takings in the state of Tasmania from `aus_accommodation`.
 
-```{r warning=F, message=F}
+Quarterly data
 
+```{r warning=F, message=F}
+tas_takings <- aus_accommodation %>%
+  filter(State == 'Tasmania')
+
+lambda <- tas_takings %>%
+  features(Takings, features = guerrero) %>%
+  pull(lambda_guerrero)
+```
+tas_takings %>%
+  autoplot(box_cox(Takings, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed gas production with $\\lambda$ = ",
+         round(lambda,2))))
+
+```{r warning=F, message=F}
+tas_takings %>%
+  transmute(
+    `Takings` = Takings,
+    `Box-Cox Takings` = box_cox(Takings, lambda),
+    `Annual change in Box-Cox Takings` = difference(box_cox(Takings, lambda), 4),
+    `Doubly differenced Takings` =
+                     difference(difference(box_cox(Takings, lambda), 4), 1)
+  ) %>%
+  pivot_longer(-Date, names_to="Type", values_to="Takings") %>%
+  mutate(
+    Type = factor(Type, levels = c(
+      "Takings",
+      "Box-Cox Takings",
+      "Annual change in Box-Cox Takings",
+      "Doubly differenced Takings"))
+  ) %>%
+  ggplot(aes(x = Date, y = Takings)) +
+  geom_line() +
+  facet_grid(vars(Type), scales = "free_y") +
+  labs(title = "Tasmanian Accomodation Takings", y = NULL)
+```
+
+Definitely appears to have a seasonal component.
+
+Appears the doubly differencing is necessary.
+
+```{r warning=F, message=F}
+# Apply Ljung-Box test
+tas_takings %>%
+  features(difference(difference(box_cox(Takings, lambda), 4), 1), ljung_box, lag = 12)
+
+## NOT THE RESULT I WANT, DOUBLE-CHECK ##
+
+tas_takings %>%
+  ACF(difference(difference(box_cox(Takings, lambda), 4), 1)) %>%
+  autoplot()
 ```
 
 ### Section c
@@ -65,20 +168,65 @@ Accommodation takings in the state of Tasmania from `aus_accommodation`.
 Monthly sales from `souvenirs`.
 
 ```{r warning=F, message=F}
+lambda <- souvenirs %>%
+  features(Sales, features = guerrero) %>%
+  pull(lambda_guerrero)
 
+souvenirs %>%
+  autoplot(box_cox(Sales, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed gas production with $\\lambda$ = ",
+         round(lambda,2))))
+
+souvenirs %>%
+  transmute(
+    `Sales` = Sales,
+    `Box-Cox sales` = box_cox(Sales, lambda),
+    `Annual change in Box-Cox sales` = difference(box_cox(Sales, lambda), 12),
+    `Doubly differenced Box-Cox sales` =
+                     difference(difference(box_cox(Sales, lambda), 12), 1)
+  ) %>%
+  pivot_longer(-Month, names_to="Type", values_to="Sales") %>%
+  mutate(
+    Type = factor(Type, levels = c(
+      "Sales",
+      "Box-Cox sales",
+      "Annual change in Box-Cox sales",
+      "Doubly differenced Box-Cox sales"))
+  ) %>%
+  ggplot(aes(x = Month, y = Sales)) +
+  geom_line() +
+  facet_grid(vars(Type), scales = "free_y") +
+  labs(title = "Souvenirs Sales", y = NULL)
+```
+
+Definitely appears to have a seasonal component.
+
+Appears the double differencing is needed.
+
+```{r warning=F, message=F}
+# Apply Ljung-Box test
+souvenirs %>%
+  features(difference(difference(box_cox(Sales, lambda), 12), 1), ljung_box, lag = 12)
+
+## NOT THE RESULT I WANT, DOUBLE-CHECK ##
 ```
 
 # Exercise 9.5
 
 For your retail data (from Exercise 8 in Section 2.10), find the appropriate order of differencing (after transformation if necessary) to obtain stationary data.
 
+```{r warning=F, message=F}
+set.seed(8675309)
+
+myseries <- aus_retail %>%
+  filter(`Series ID` == sample(aus_retail$`Series ID`,1))
+```
+
 # Exercise 9.6
 
 Simulate and plot some data from simple ARIMA models.
-
-```{r warning=F, message=F}
-
-```
 
 ### Section a
 
@@ -145,12 +293,38 @@ Graph the latter two series and compare them.
 
 Consider `aus_airpassengers`, the total number of passengers (in millions) from Australian air carriers for the period 1970-2011.
 
+```{r warning=F, message=F}
+aus_airpassengers %>% head()
+```
+
 ### Section a
 
 Use `ARIMA()` to find an appropriate ARIMA model. What model was selected. Check that the residuals look like white noise. Plot forecasts for the next 10 periods.
 
 ```{r warning=F, message=F}
+# Generate ARIMA model
+aus_air_mod <- aus_airpassengers %>% model(ARIMA(Passengers))
+```
 
+Display model definition
+
+```{r warning=F, message=F}
+# Output report to show model selected
+report(aus_air_mod)
+```
+
+Check the residuals look like white noise
+
+```{r warning=F, message=F}
+aus_air_mod %>% gg_tsresiduals()
+```
+
+Plot forecasts for the next 10 periods
+
+```{r warning=F, message=F}
+aus_air_fc <- aus_air_mod %>% forecast(h=10)
+
+aus_air_fc
 ```
 
 ### Section b
