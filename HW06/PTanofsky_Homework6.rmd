@@ -352,8 +352,10 @@ $\phi_1 = 0.6$ and $\sigma^2 = 1$. The process starts with $y_1 = 0$.
 ```{r warning=F, message=F}
 y <- numeric(100)
 e <- rnorm(100)
+
 for(i in 2:100)
   y[i] <- 0.6*y[i-1] + e[i]
+
 sim <- tsibble(idx = seq_len(100), y = y, index = idx)
 ```
 
@@ -362,17 +364,40 @@ sim <- tsibble(idx = seq_len(100), y = y, index = idx)
 Produce a time plot for the series. How does the plot change as you change $\phi_1$?
 
 ```{r warning=F, message=F}
-head(sim)
-
 sim %>% autoplot(y)
+
+# phi=0.2
+for(i in 2:100)
+  y[i] <- 0.2*y[i-1] + e[i]
+sim02 <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+# phi=1.0
+for(i in 2:100)
+  y[i] <- 1.0*y[i-1] + e[i]
+sim10 <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+sim02 %>% autoplot(y)
+sim10 %>% autoplot(y)
 ```
+
+Lower the $\phi_1$, the more oscillations occur, the higher the fewer oscillations
 
 ### Section c
 
 Write your own code to generate data from an MA(1) model with $\theta_1 = 0.6$ and $\sigma^2 = 1$.
 
-```{r warning=F, message=F}
+$$MA(1)\ is\ y_t = c + \epsilon_t + \theta_1\epsilon_{t-1}$$
 
+```{r warning=F, message=F}
+y <- numeric(100)
+e <- rnorm(100)
+
+for(i in 2:100)
+  y[i] <- e[i] + 0.6*e[i-1]
+
+sim_ma1 <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+#head(sim_ma1)
 ```
 
 ### Section d
@@ -380,7 +405,20 @@ Write your own code to generate data from an MA(1) model with $\theta_1 = 0.6$ a
 Produce a time plot for the series. How does the plot change as you change $\theta_1$?
 
 ```{r warning=F, message=F}
+sim_ma1 %>% autoplot(y)
 
+# theta is 0.2
+for(i in 2:100)
+  y[i] <- e[i] + 0.2*e[i-1]
+sim_ma02 <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+# theta is 1.0
+for(i in 2:100)
+  y[i] <- e[i] + 1.0*e[i-1]
+sim_ma10 <- tsibble(idx = seq_len(100), y = y, index = idx)
+
+sim_ma02 %>% autoplot(y)
+sim_ma10 %>% autoplot(y)
 ```
 
 ### Section e
@@ -388,15 +426,32 @@ Produce a time plot for the series. How does the plot change as you change $\the
 Generate data from an ARMA(1,1) model with  $\phi_1 = 0.6,$ $\theta_1 = 0.6$ and $\sigma^2 = 1$.
 
 ```{r warning=F, message=F}
+y <- numeric(100)
+e <- rnorm(100)
 
+phi <- 0.6
+theta <- 0.6
+
+for(i in 2:100)
+  y[i] <- phi*y[i-1] + theta*e[i-1] + e[i]
+
+sim_arma11 <- tsibble(idx = seq_len(100), y = y, index = idx)
 ```
 
 ### Section f
 
 Generate data from an AR(2) model with $\phi_1 = -0.8$, $\phi_2 = 0.3$ and $\sigma^2 = 1$. (Note that these parameters will give a non-stationary series.)
 
-```{r warning=F, message=F}
+$$AR(2)\ is \ y_t = c + \phi_1y_{t-1} + \phi_2y_{t-2} + \epsilon_t$$
 
+```{r warning=F, message=F}
+y <- numeric(100)
+e <- rnorm(100)
+
+for(i in 3:100)
+  y[i] <- -0.8*y[i-1] + 0.3*y[i-2] + e[i]
+
+sim_ar2 <- tsibble(idx = seq_len(100), y = y, index = idx)
 ```
 
 ### Section g
@@ -404,7 +459,9 @@ Generate data from an AR(2) model with $\phi_1 = -0.8$, $\phi_2 = 0.3$ and $\sig
 Graph the latter two series and compare them.
 
 ```{r warning=F, message=F}
+sim_arma11 %>% autoplot(y)
 
+sim_ar2 %>% autoplot(y)
 ```
 
 # Exercise 9.7
@@ -501,7 +558,108 @@ report(aus_air_arima021)
 
 ```
 
-# Exercise 9.8 (confirm before working on)
+# Exercise 9.8
+
+For the United States GDP series (from `global_economy`):
+
+```{r warning=F, message=F}
+us_gdp <- global_economy %>%
+  filter(Country == "United States") %>%
+  mutate(GDP = GDP/1e9) # GDP in billions
+  
+head(us_gdp)
+
+us_gdp %>% autoplot(GDP)
+```
+
+### Section a
+
+if necessary, find a suitable Box-Cox transformation for the data;
+
+```{r warning=F, message=F}
+# Box Cox
+lambda <- us_gdp %>%
+  features(GDP, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+us_gdp %>%
+  autoplot(box_cox(GDP, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed US GDP with $\\lambda$ = ",
+         round(lambda,2))))
+
+us_gdp <- us_gdp %>%
+  mutate(GDP_T = box_cox(GDP, lambda))
+
+us_gdp <- us_gdp %>%
+  mutate(Diff = difference(GDP_T))
+
+head(us_gdp)
+  
+us_gdp %>%
+  ACF(Diff) %>%
+  autoplot()
+
+us_gdp %>%
+  PACF(Diff) %>%
+  autoplot()
+```
+
+
+Results in $\lambda = 0.28$.
+
+### Section b
+
+fit a suitable ARIMA model to the transformed data using `ARIMA()`;
+
+```{r warning=F, message=F}
+us_gdp_mod <- us_gdp %>% model(ARIMA(GDP_T))
+
+report(us_gdp_mod)
+```
+
+### Section c
+
+try some other plausible models by experimenting with the orders chosen;
+
+```{r warning=F, message=F}
+us_gdp_mod111 <- us_gdp %>%
+  model(ARIMA(GDP_T ~ pdq(1,1,1)))
+
+us_gdp_mod211 <- us_gdp %>%
+  model(ARIMA(GDP_T ~ pdq(2,1,1)))
+
+us_gdp_mod112 <- us_gdp %>%
+  model(ARIMA(GDP_T ~ pdq(1,1,2)))
+
+us_gdp_mod101 <- us_gdp %>%
+  model(ARIMA(GDP_T ~ pdq(1,0,1)))
+```
+
+### Section d
+
+choose what you think is the best model and check the residual diagnostics;
+
+```{r warning=F, message=F}
+
+```
+
+### Section e
+
+produce forecasts of your fitted model. Do the forecasts look reasonable?
+
+```{r warning=F, message=F}
+
+```
+
+### Section f
+
+compare the results with what you would obtain using `ETS()` (with no transformation).
+
+```{r warning=F, message=F}
+
+```
 
 
 
