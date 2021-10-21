@@ -24,13 +24,17 @@ Figure 9.32 shows the ACFs for 36 random numbers, 360 random numbers and 1,000 r
 
 Explain the differences among these figures. Do they all indicate that the data are white noise?
 
-**Answer:** XXX
+**Answer:** The primary difference among the figures is the value of the bounds. From left to right the bounds get closer to zero. Yes, by the definition below, each figure indicates white noise.
+
+Textbook definition of white noise from section 2.9:
+
+"For a white noise series, we expect 95% of the spikes in the ACF to lie within $\pm/\sqrt{T}$ where $T$ is the length of the time series. It is common to plot these bounds on a graph of the ACF (the blue dashed lines above). If one or more large spikes are outside these bounds, or if substantially more than 5% of spikes are outside these bounds, then the series is probably not white noise."
 
 ### Section b
 
 Why are the critical values at different distances from the mean of zero? Why are the autocorrelations different in each figure when they each refer to white noise?
 
-**Answer:** XXX
+**Answer:** The critical values are different distances from the mean of zero because, as noted above, the calculation is based on the length of the time series. The longer the time series the closer the critical values are to the mean. This implies the time series lengths increase from left to right as noted in the question itself. Each time series is based on random numbers, thus the autocorrelations will be unique to each figure. White noise indicates a mean near zero and a constant variance. As the question indicates random numbers, then differencing those random numbers should result in a mean near zero and constant variance.
 
 # Exercise 9.2
 
@@ -44,6 +48,8 @@ gafa_stock %>%
        y = "Price")
 ```
 
+**Answer:** Data is non-stationary as the plot shows a clear increasing trend.
+
 ```{r warning=F, message=F}
 gafa_stock %>%
   filter(Symbol == "AMZN") %>%
@@ -51,12 +57,16 @@ gafa_stock %>%
   autoplot()
 ```
 
+**Answer:** XXX
+
 ```{r warning=F, message=F}
 gafa_stock %>%
   filter(Symbol == "AMZN") %>%
   PACF(Close) %>%
   autoplot()
 ```
+
+**Answer:** XXX
 
 # Exercise 9.3
 
@@ -266,7 +276,7 @@ For your retail data (from Exercise 8 in Section 2.10), find the appropriate ord
 ```{r warning=F, message=F}
 set.seed(8675309)
 
-# Montly data
+# Monthly data
 myseries <- aus_retail %>%
   filter(`Series ID` == sample(aus_retail$`Series ID`,1))
 
