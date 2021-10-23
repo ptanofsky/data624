@@ -57,6 +57,8 @@ atm1_data_ts <- atm_data_ts %>%
 
 summary(atm1_data_ts)
 
+atm1_data_ts
+
 atm1_data_ts %>%
   autoplot(Cash)
 
@@ -70,120 +72,80 @@ summary(atm1_data_ts)
 
 head(atm1_data_ts)
 ```
-x11_dcmp <- atm1_data_ts %>%
-  model(x11 = X_13ARIMA_SEATS(Cash ~ x11()))
 
 
-```{r warning=F, message=F}
+
+```{r warning=F, message=F, eval=F}
 
 atm1_data_ts <- atm1_data_ts %>%
-  mutate(day = row_number()) %>%
-#  select(c(day_by_row, Cash)) %>%
-  update_tsibble(index = day)
+  mutate(DATE = as_date(DATE)) %>%
+  update_tsibble(index = DATE)
 
 atm1_data_ts
 ```
-dcmp <- atm1_data_ts %>%
-  model(stl = STL(Cash))
 
 
 
 
 ```{r warning=F, message=F}
+# From: https://stats.stackexchange.com/questions/494013/control-the-period-for-daily-time-series-in-tsibbles
+atm1_dcmp <- atm1_data_ts %>%
+  model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))) 
 
-x11_dcmp <- atm1_data_ts %>%
-  model(x11 = X_13ARIMA_SEATS(Cash ~ x11()))
+atm1_dcmp %>% components() %>% autoplot()
 
-x11_dcmp
+autoplot(atm1_data_ts, Cash, colour = "gray") +
+  geom_line(aes(y=xx$season_adjust), colour = "#0072B2")
+
+# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
-
-x11_dcmp %>%
-  autoplot() +
-  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
-```
-
-
-dcmp %>%
-  autoplot() +
-  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
-```
-autoplot(x11_dcmp) +
-  labs(title =
-    "Decomposition of Turnover in Queensland Takeaway food services using X-11.")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 ```{r warning=F, message=F}
-atm_data_ts %>%
-  filter(ATM == 'ATM2') %>%
-  autoplot(Cash)
-  
-dc <- atm_data_ts %>%
-  model(classical_decomposition(
-    Cash, type = "multiplicative")) %>%
-  components() 
+atm2_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM2')
 
-dc %>%
-  autoplot() +
-  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
+atm2_data_ts %>%  autoplot(Cash)
+
+# Calculate median value for ATM2
+median <- median(atm2_data_ts$Cash, na.rm=TRUE)
+
+# Set NAs to median
+atm2_data_ts$Cash[is.na(atm2_data_ts$Cash)] <- median
+
+summary(atm2_data_ts)
+
+atm2_data_ts %>%
+  model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
+        ) %>% 
+  components() %>% autoplot()
 ```
 
 ```{r warning=F, message=F}
-atm_data_ts %>%
-  filter(ATM == 'ATM3') %>%
-  autoplot(Cash)
+atm3_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM3', Cash > 0)
 
-atm_data_ts %>%
-  filter(ATM == 'ATM3') %>%
-  model(
-    STL(Cash ~ trend(window = 7) +
-                   season(window = "periodic"),
-    robust = TRUE)) %>%
-  components() %>%
-  autoplot()
+atm3_data_ts %>% autoplot(Cash)
+
+summary(atm3_data_ts)
+
+
+# Literally just 3 values above 0
 ```
 
 ```{r warning=F, message=F}
-atm_data_ts %>%
-  filter(ATM == 'ATM4') %>%
-  autoplot(Cash)
+atm4_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM4')
 
-atm_data_ts %>%
-  filter(ATM == 'ATM4') %>%
-  model(
-    STL(Cash ~ trend(window = 7) +
-                   season(window = "periodic"),
-    robust = TRUE)) %>%
-  components() %>%
-  autoplot()
+atm4_data_ts %>% autoplot(Cash)
+
+summary(atm4_data_ts)
+
+atm4_data_ts %>%
+  model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
+        ) %>% 
+  components() %>% autoplot()
 ```
-
-#atm_data_ts %>% print(n = Inf)
 
 
 Summary output
@@ -282,83 +244,24 @@ Part C consists of two data sets.  These are simple 2 columns sets, however they
 ```
 
 ```{r warning=F, message=F}
-us_retail_employment <- us_employment %>%
-  filter(year(Month) >= 1990, Title == "Retail Trade") %>%
-  select(-Series_ID)
 
-us_retail_employment
-
-x11_dcmp <- us_retail_employment %>%
-  model(x11 = X_13ARIMA_SEATS(Employed ~ x11())) %>%
-  components()
-autoplot(x11_dcmp) +
-  labs(title =
-    "Decomposition of total US retail employment using X-11.")
 ```
 
 
 ```{r warning=F, message=F}
-gafa_stock
 
-google_stock <- gafa_stock %>%
-  filter(Symbol == "GOOG", year(Date) >= 2015) %>%
-  mutate(day = row_number()) %>%
-  update_tsibble(index = day, regular = TRUE)
-# Filter the year of interest
-google_2015 <- google_stock %>% filter(year(Date) == 2015)
-
-google_2015
-
-dcmp <- google_2015 %>%
-  model(stl = STL(Close))
-
-dcmp %>%
-  components()
-
-x11_dcmp <- google_2015 %>%
-  model(x11 = X_13ARIMA_SEATS(Close ~ x11())) %>%
-  components()
-autoplot(x11_dcmp) +
-  labs(title =
-    "Decomposition of total US retail employment using X-11.")
 ```
 
 ```{r warning=F, message=F}
-xx <- atm_data_ts %>%  
-  filter(ATM == "ATM1") %>%
-  mutate(DATE = yearmonth(DATE)) %>%
-  select(Cash) %>%
-  update_tsibble(index = DATE)
-
-xx
-
-xx %>% autoplot(Cash)
-
-xx %>% gg_season
-
-xx_mod <- xx %>%
-  model(stl = STL(Cash))
-
-
-components(xx_mod) %>% autoplot()
-```
-
-dc %>%
-  autoplot() +
-  labs(title = "Classical multiplicative decomposition of gas production in Australia in petajoules")
 
 ```
-dcmp %>%
-  components() %>% autoplot()
-```
 
-x11_dcmp <- xxy %>%
-  model(x11 = X_13ARIMA_SEATS(Cash ~ x11())) %>%
-  components()
-autoplot(x11_dcmp) +
-  labs(title =
-    "Decomposition of total US retail employment using X-11.")
-```
+
+
+
+
+
+
 
 
 
