@@ -68,6 +68,14 @@ gafa_stock %>%
 
 **Answer:** The PACF plot shows correlation which of course matches the first lag of the ACF, but then lag 5, 11, 19, 25, 29, indicate correlation with $y_t$ even after removing the intervening correlations. Thus, this indicates the data display non-stationarity.
 
+```{r warning=F, message=F}
+gafa_stock %>%
+  filter(Symbol == "AMZN") %>%
+  features(Close, unitroot_ndiffs)
+```
+
+According to `unitroot_ndiffs`, the Amazon closing stock price should be differenced once.
+
 # Exercise 9.3
 
 For the following series, find an appropriate Box-Cox transformation and order of differencing in order to obtain stationary data.
@@ -406,7 +414,7 @@ sim_ma02 %>% autoplot(y)
 sim_ma10 %>% autoplot(y)
 ```
 
-The lower the value of $\theta_1$, the close the plot stays around zero, but with the higher value of $\theta_1$, the plot still remains around zero, but absolute values of y tend to be larger.
+The lower the value of $\theta_1$, the closer the plot stays around zero, but with the higher value of $\theta_1$, the plot still remains around zero, but absolute values of y tend to be larger.
 
 ### Section e
 
@@ -461,6 +469,7 @@ Consider `aus_airpassengers`, the total number of passengers (in millions) from 
 
 ```{r warning=F, message=F}
 library(urca)
+library(fpp2)
 aus_airpassengers %>% head()
 # Year      Passengers
 
@@ -482,6 +491,8 @@ Use `ARIMA()` to find an appropriate ARIMA model. What model was selected. Check
 ```{r warning=F, message=F}
 # Generate ARIMA model
 aus_air_mod <- aus_airpassengers %>% model(ARIMA(Passengers, stepwise = F))
+
+#aus_air_mod_auto <- auto.arima(aus_airpassengers$Passengers)
 ```
 
 Display model definition
@@ -489,6 +500,7 @@ Display model definition
 ```{r warning=F, message=F}
 # Output report to show model selected
 report(aus_air_mod)
+#aus_air_mod_auto
 ```
 
 Result is an ARIMA(0,2,1) model.
@@ -550,6 +562,7 @@ Plot forecasts from an ARIMA(2,1,2) model with drift and compare these to parts 
 ```{r warning=F, message=F}
 aus_air_arima212 <- aus_airpassengers %>%
   model(ARIMA(Passengers ~ 1 + pdq(2,1,2)))
+
 report(aus_air_arima212)
 
 aus_air_fc_212 <- aus_air_arima212 %>% forecast(h=10)
@@ -559,22 +572,47 @@ aus_air_fc_212
 autoplot(aus_air_fc_212, aus_airpassengers) +
   labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
 
+# ARIMA function would not work with constant set to 0 as seen below in commented code
+#aus_air_arima212_noCon <- aus_airpassengers %>%
+#  model(ARIMA(Passengers ~ 0 + pdq(2,1,2)))
+#report(aus_air_arima212_noCon)
+```
 
-aus_air_arima212_noCon <- aus_airpassengers %>%
-  model(ARIMA(Passengers ~ 0 + pdq(2,1,2)))
-report(aus_air_arima212_noCon)
+The forecast for ARIMA(2,1,2) model with constant appears to grow similar to the forecasts of ARIMA(0,1,0), but the ARIMA(2,1,2) model forecasts are not a straight line as those in section a and c.
+
+Unfortunately, I could not get a model to generate with `model(ARIMA(Passengers ~ 0 + pdq(2,1,2)))` using library `fpp3`. Thus, I reverted to using `Arima` from library `fpp2`.
+
+```{r warning=F, message=F}
+aus_air_arima212_wCon <- Arima(aus_airpassengers$Passengers, order = c(2,1,2), include.constant=TRUE, include.drift=TRUE, method="ML")
+
+aus_air_arima212_wCon
+
+aus_air_fc_212_wCon <- aus_air_arima212_wCon %>% forecast(h=10)
+
+aus_air_fc_212_wCon
+
+autoplot(aus_air_fc_212_wCon) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
+```
+
+With `Arima(..., include.constant=TRUE, include.drift=TRUE)` I produce a model with essentially the same AICc (AICc=206.34) as the `ARIMA(2,1,2)` function (AICc=206.61). Interesting result though, as the `Arima()` function produces higher forecasted values. 
+
+```{r warning=F, message=F}
+aus_air_arima212_noCon <- Arima(aus_airpassengers$Passengers, order = c(2,1,2), include.constant=FALSE, include.drift=TRUE, method="ML")
+
+aus_air_arima212_noCon
 
 aus_air_fc_212_noCon <- aus_air_arima212_noCon %>% forecast(h=10)
 
 aus_air_fc_212_noCon
 
-autoplot(aus_air_fc_212_noCon, aus_airpassengers) +
+autoplot(aus_air_fc_212_noCon) +
   labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
 ```
 
-The forecast for ARIMA(2,1,2) model with constant appears to grow similar to the forecasts of ARIMA(0,1,0), but the ARIMA(2,1,2) model forecasts are not a straight line as those in section a and c.
+With `Arima(..., include.constant=FALSE, include.drift=TRUE)` I produce a model with essentially the same AICc but slighted better (AICc=205.88) as the `ARIMA(2,1,2)` function (AICc=206.61). Again, the `Arima()` function produces even higher forecasted values. 
 
-By removing the constant from the ARIMA(2,1,2) model, the result is a NULL model. Apparently the `ARIMA` function could not produce a valid model.
+I honestly expected the opposite results. I would have expected the function with constant to have higher forecasted values over the function without the addition of the constant.
 
 ### Section e
 
@@ -595,7 +633,9 @@ autoplot(aus_air_fc_021, aus_airpassengers) +
 
 ```
 
-The forecasts for the ARIMA(0,2,1) model with a constant shows an even greater increase in the forecasted values than compared to the initial ARIMA(0,2,1) with drift.
+The forecasts for the ARIMA(0,2,1) model with a constant shows an even greater increase in the forecasted values than compared to the initial ARIMA(0,2,1) with drift. According to the book, "If $d > 1$ the constant is always omitted as a quadratic or higher order trend is particularly dangerous when forecasting."
+
+The addition of the constant resulting in higher forecasted values does meet my expectations of impact to the forecast, unlike in the above section.
 
 # Exercise 9.8
 
@@ -634,7 +674,7 @@ us_gdp <- us_gdp %>%
 us_gdp <- us_gdp %>%
   mutate(Diff = difference(GDP_T))
 
-head(us_gdp)
+#head(us_gdp)
   
 us_gdp %>%
   ACF(Diff) %>%
@@ -650,6 +690,8 @@ Results in $\lambda = 0.28$.
 ### Section b
 
 Fit a suitable ARIMA model to the transformed data using `ARIMA()`.
+
+Using the automatic model generation of `ARIMA()`.
 
 ```{r warning=F, message=F}
 us_gdp_mod <- us_gdp %>% model(ARIMA(GDP_T))
@@ -702,6 +744,8 @@ us_gdp_mod210 %>% gg_tsresiduals()
 report(us_gdp_mod210)
 ```
 
+Based on the lowest AICc value of -8.98, the initial/automatic ARIMA model of ARIMA(1,1,0) with drift is the best model. The residual diagnostics show no reason to choose otherwise.
+
 ### Section e
 Produce forecasts of your fitted model. Do the forecasts look reasonable?
 
@@ -714,6 +758,8 @@ autoplot(us_gdp_fc, us_gdp) +
   labs(title="US GDP", y="Box-Cox Transformation" )
 ```
 
+Yes, the forecasted values appear reasonable. The values follow the increasing trend clearly visible in the transformed data.
+
 ### Section f
 
 Compare the results with what you would obtain using `ETS()` (with no transformation).
@@ -721,6 +767,7 @@ Compare the results with what you would obtain using `ETS()` (with no transforma
 ```{r warning=F, message=F}
 fit_us_gdp <- us_gdp %>%
   model(
+    ETS = ETS(GDP),
     SES = ETS(GDP ~ error("A") + trend("N") + season("N")),
     Holt = ETS(GDP ~ error("A") + trend("A") + season("N")),
     Damped = ETS(GDP ~ error("A") + trend("Ad") + season("N")),
@@ -737,28 +784,4 @@ fc_us_gdp %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-
-
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-
-
-
-
-
-
-
-
-
-
+With no transformation, the automated ARIMA model result most closely aligns with the Holt's linear trend version of the ETS model. The automated ETS model also shows similar forecast to the automated ARIMA model.
