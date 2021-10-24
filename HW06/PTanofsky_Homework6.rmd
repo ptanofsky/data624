@@ -57,7 +57,7 @@ gafa_stock %>%
   autoplot()
 ```
 
-**Answer:** XXX
+**Answer:** The ACF plot decreases to zero very slowly, and as the Hyndman textbooks indicates "for a stationary time series, the ACF will drop to zero relatively quickly, while the ACF of non-stationary data decreases slowly." Thus, the ACF plot shows non-stationary of data.
 
 ```{r warning=F, message=F}
 gafa_stock %>%
@@ -66,7 +66,7 @@ gafa_stock %>%
   autoplot()
 ```
 
-**Answer:** XXX
+**Answer:** The PACF plot shows correlation which of course matches the first lag of the ACF, but then lag 5, 11, 19, 25, 29, indicate correlation with $y_t$ even after removing the intervening correlations. Thus, this indicates the data display non-stationarity.
 
 # Exercise 9.3
 
@@ -103,21 +103,27 @@ turkey_gdp %>%
   autoplot(diff_bc_gdp) +
   labs(y = "",
        title = latex2exp::TeX(paste0(
-         "Transformed Turkish GDP with $\\lambda$ = ",
+         "First Difference of Transformed Turkish GDP with $\\lambda$ = ",
          round(lambda,2))))
 ```
 
+Plot looks good, let's apply Unit Root Test.
+
 ```{r warning=F, message=F}
-# Apply Ljung-Box test
+# Apply Unit Root Test
 turkey_gdp %>%
-  features(diff_bc_gdp, ljung_box, lag = 10)
+  features(diff_bc_gdp, unitroot_kpss)
 ```
+
+Unit Root Test results in a very small test statistic and within the range expected for stationary data, so the p-value is greater than 0.1, thus concluding that the differenced data appear stationary.
 
 ### Section b
 
 Accommodation takings in the state of Tasmania from `aus_accommodation`.
 
-Quarterly data
+Note: Quarterly data
+
+Calculate lambda for the Box-Cox transformation.
 
 ```{r warning=F, message=F}
 tas_takings <- aus_accommodation %>%
@@ -127,12 +133,8 @@ lambda <- tas_takings %>%
   features(Takings, features = guerrero) %>%
   pull(lambda_guerrero)
 ```
-tas_takings %>%
-  autoplot(box_cox(Takings, lambda)) +
-  labs(y = "",
-       title = latex2exp::TeX(paste0(
-         "Transformed gas production with $\\lambda$ = ",
-         round(lambda,2))))
+
+Plot the original data, the data with Box-Cox, the first difference of the Box-Cox transformation, and then a second difference, as well.
 
 ```{r warning=F, message=F}
 tas_takings %>%
@@ -163,37 +165,27 @@ Appears the doubly differencing is necessary.
 
 ```{r warning=F, message=F}
 tas_takings %>%
-  mutate(box_cox_takings = box_cox(Takings, lambda)) %>%
-  features(box_cox_takings, unitroot_nsdiffs)
-# Result is ...
-#> # A tibble: 1 x 1
-#>   nsdiffs
-#>     <int>
-#> 1       1
+  mutate(diff_bc_takings = difference(box_cox(Takings, lambda), 4)) %>%
+  features(diff_bc_takings, unitroot_kpss)
 
 tas_takings %>%
-  mutate(box_cox_takings = difference(box_cox(Takings, lambda), 4)) %>%
-  features(box_cox_takings, unitroot_ndiffs)
-# Result is ...
-#> # A tibble: 1 x 1
-#>   ndiffs
-#>    <int>
-#> 1      0
+  mutate(diff_bc_takings = difference(difference(box_cox(Takings, lambda), 4), 1)) %>%
+  features(diff_bc_takings, unitroot_kpss)
 ```
+
+Based on the above output from the Unit Root Test, a second differencing of the Box-Cox transformation of the data is required to attain stationarity, which falls in line with the plots above.
 
 ```{r warning=F, message=F}
-# DO I REALLY WANT TO KEEP THIS?
-# Apply Ljung-Box test
 tas_takings %>%
-  features(difference(difference(box_cox(Takings, lambda), 4), 1), ljung_box, lag = 12)
-
-## NOT THE RESULT I WANT, DOUBLE-CHECK ##
-## unitroot_nsdiffs() from section 9.1 instead of ljung-box test
+  mutate(box_cox_takings = box_cox(Takings, lambda)) %>%
+  features(box_cox_takings, unitroot_nsdiffs)
 
 tas_takings %>%
-  ACF(difference(difference(box_cox(Takings, lambda), 4), 1)) %>%
-  autoplot()
+  mutate(box_cox_takings2 = difference(box_cox(Takings, lambda), 4)) %>%
+  features(box_cox_takings2, unitroot_ndiffs)
 ```
+
+I also attempted the `unitroot_nsdiffs` on the Box-Cox transformed data and `unitroot_ndiffs` on the differenced Box-Cox transformed data. The first test indicated a seasonal differencing of one required, but the test on the differenced transformed data indicated differencing was not needed. That being said, I'm going with the second differencing.
 
 ### Section c
 
@@ -239,35 +231,28 @@ Appears the double differencing is needed.
 
 ```{r warning=F, message=F}
 souvenirs %>%
+  mutate(diff_bc_sales = difference(box_cox(Sales, lambda), 12)) %>%
+  features(diff_bc_sales, unitroot_kpss)
+
+souvenirs %>%
+  mutate(diff_bc_sales = difference(difference(box_cox(Sales, lambda), 12), 1)) %>%
+  features(diff_bc_sales, unitroot_kpss)
+```
+
+Similar to section b, based on the above output from the Unit Root Test, a second differencing of the Box-Cox transformation of the data is required to attain stationarity, which falls in line with the plots above.
+
+```{r warning=F, message=F}
+souvenirs %>%
   mutate(box_cox_sales = box_cox(Sales, lambda)) %>%
   features(box_cox_sales, unitroot_nsdiffs)
-
-# Result is ....
-#> # A tibble: 1 x 1
-#>   nsdiffs
-#>     <int>
-#> 1       1
 
 # Now try differencing on the seasonal difference
 souvenirs %>%
   mutate(box_cox_sales = difference(box_cox(Sales, lambda), 12)) %>%
   features(box_cox_sales, unitroot_ndiffs)
-# Result is ...
-#> # A tibble: 1 x 1
-#>   ndiffs
-#>    <int>
-#> 1      0
 ```
 
-```{r warning=F, message=F}
-# DO I REALLY WANT THIS??
-# Apply Ljung-Box test
-souvenirs %>%
-  features(difference(difference(box_cox(Sales, lambda), 12), 1), ljung_box, lag = 12)
-
-## NOT THE RESULT I WANT, DOUBLE-CHECK ##
-## unitroot_nsdiffs() from section 9.1 instead of ljung-box test
-```
+At least this time, the second differencing is needed to reach stationarity based on the output of the `unitroot_nsdiffs` and `unitroot_ndiffs` tests. But after knitting the RMD file, the `ndiffs` is resulting in zero, despite the execution of the above snippet resulting in 1 in RStudio. I'm still going with second differencing required.
 
 # Exercise 9.5
 
@@ -301,7 +286,7 @@ myseries %>%
          round(lambda,2))))
 ```
 
-
+Plotting the data in the same manner as Exercise 9.3 for visual inspection.
 
 ```{r warning=F, message=F}
 myseries %>%
@@ -331,24 +316,15 @@ myseries %>%
 myseries %>%
   mutate(box_cox_turnover = box_cox(Turnover, lambda)) %>%
   features(box_cox_turnover, unitroot_nsdiffs)
-# Result is ....
-#> # A tibble: 1 x 1
-#>   nsdiffs
-#>     <int>
-#> 1       1
 
 # ndiff
 # Now try differencing on the seasonal difference
 myseries %>%
   mutate(box_cox_turnover = difference(box_cox(Turnover, lambda), 12)) %>%
   features(box_cox_turnover, unitroot_ndiffs)
-# Result is ... also 1
-#> # A tibble: 1 x 1
-#>   ndiffs
-#>    <int>
-#> 1      1
-
 ```
+
+Based on the above output from `unitroot_nsdiffs` and `unitroot_ndiffs`, second differencing is needed after applying the Box-Cox transformation.
 
 # Exercise 9.6
 
@@ -356,8 +332,7 @@ Simulate and plot some data from simple ARIMA models.
 
 ### Section a
 
-Use the following R code to generate data from an AR(1) model with  
-$\phi_1 = 0.6$ and $\sigma^2 = 1$. The process starts with $y_1 = 0$.
+Use the following R code to generate data from an AR(1) model with  $\phi_1 = 0.6$ and $\sigma^2 = 1$. The process starts with $y_1 = 0$.
  
 ```{r warning=F, message=F}
 y <- numeric(100)
@@ -390,7 +365,7 @@ sim02 %>% autoplot(y)
 sim10 %>% autoplot(y)
 ```
 
-Lower the $\phi_1$, the more oscillations occur, the higher the fewer oscillations
+Lower the $\phi_1$, the more oscillations occur around zero, the higher the $\phi_1$ value, the fewer oscillations and thus the plot doesn't center around zero.
 
 ### Section c
 
@@ -430,6 +405,8 @@ sim_ma10 <- tsibble(idx = seq_len(100), y = y, index = idx)
 sim_ma02 %>% autoplot(y)
 sim_ma10 %>% autoplot(y)
 ```
+
+The lower the value of $\theta_1$, the close the plot stays around zero, but with the higher value of $\theta_1$, the plot still remains around zero, but absolute values of y tend to be larger.
 
 ### Section e
 
@@ -474,13 +451,28 @@ sim_arma11 %>% autoplot(y)
 sim_ar2 %>% autoplot(y)
 ```
 
+The plot for ARMA(1,1) model appears close to stationary data. The variance does appear to increase as the plot moves from left to right.
+
+As for the AR(2) model, the plot is certainly not stationary. The variance clearly grows as the plot moves from left to right.
+
 # Exercise 9.7
 
 Consider `aus_airpassengers`, the total number of passengers (in millions) from Australian air carriers for the period 1970-2011.
 
 ```{r warning=F, message=F}
+library(urca)
 aus_airpassengers %>% head()
 # Year      Passengers
+
+aus_airpassengers %>% autoplot()
+
+# Box Cox
+lambda <- aus_airpassengers %>%
+  features(Passengers, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+aus_airpassengers %>%
+  autoplot(box_cox(Passengers, lambda))
 ```
 
 ### Section a
@@ -489,7 +481,7 @@ Use `ARIMA()` to find an appropriate ARIMA model. What model was selected. Check
 
 ```{r warning=F, message=F}
 # Generate ARIMA model
-aus_air_mod <- aus_airpassengers %>% model(ARIMA(Passengers))
+aus_air_mod <- aus_airpassengers %>% model(ARIMA(Passengers, stepwise = F))
 ```
 
 Display model definition
@@ -499,11 +491,15 @@ Display model definition
 report(aus_air_mod)
 ```
 
+Result is an ARIMA(0,2,1) model.
+
 Check the residuals look like white noise
 
 ```{r warning=F, message=F}
 aus_air_mod %>% gg_tsresiduals()
 ```
+
+Yes, the residuals appear to be white noise.
 
 Plot forecasts for the next 10 periods
 
@@ -511,22 +507,19 @@ Plot forecasts for the next 10 periods
 aus_air_fc <- aus_air_mod %>% forecast(h=10)
 
 aus_air_fc
+
+autoplot(aus_air_fc, aus_airpassengers) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
 ```
+
 
 ### Section b
 
 Write the model in terms of the backshift operator.
 
-Model: ARIMA(0,2,1) 
+Model: ARIMA(0,2,1). As the model has no `p` term, thus AR(0) and no constant, the model in terms of backshift operator is: 
 
-$$(1-B)^2y_t = c + (1+\theta_1B)\epsilon_t$$
-
-Random work, probably delete
-$$B(By_t) = B^2y_t = y_{t-2}$$
-
-```{r warning=F, message=F}
-
-```
+$$(1-B)^2y_t = (1+\theta_1B)\epsilon_t$$
 
 ### Section c
 
@@ -540,7 +533,15 @@ aus_air_arima010 <- aus_airpassengers %>%
 
 report(aus_air_arima010)
 
+aus_air_fc_010 <- aus_air_arima010 %>% forecast(h=10)
+
+aus_air_fc_010
+
+autoplot(aus_air_fc_010, aus_airpassengers) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
 ```
+
+The forecasts for ARIMA(0,1,0) appear to not rise as quickly as those for ARIMA(0,2,1) with drift. The forecasts for both appear to follow a straight, increasing line.
 
 ### Section d
 
@@ -548,13 +549,32 @@ Plot forecasts from an ARIMA(2,1,2) model with drift and compare these to parts 
 
 ```{r warning=F, message=F}
 aus_air_arima212 <- aus_airpassengers %>%
-  model(ARIMA(Passengers ~ pdq(1,1,2)))
+  model(ARIMA(Passengers ~ 1 + pdq(2,1,2)))
 report(aus_air_arima212)
 
-# 212 produces NULL model
-# 211 works though
-# 112 works, too
+aus_air_fc_212 <- aus_air_arima212 %>% forecast(h=10)
+
+aus_air_fc_212
+
+autoplot(aus_air_fc_212, aus_airpassengers) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
+
+
+aus_air_arima212_noCon <- aus_airpassengers %>%
+  model(ARIMA(Passengers ~ 0 + pdq(2,1,2)))
+report(aus_air_arima212_noCon)
+
+aus_air_fc_212_noCon <- aus_air_arima212_noCon %>% forecast(h=10)
+
+aus_air_fc_212_noCon
+
+autoplot(aus_air_fc_212_noCon, aus_airpassengers) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
 ```
+
+The forecast for ARIMA(2,1,2) model with constant appears to grow similar to the forecasts of ARIMA(0,1,0), but the ARIMA(2,1,2) model forecasts are not a straight line as those in section a and c.
+
+By removing the constant from the ARIMA(2,1,2) model, the result is a NULL model. Apparently the `ARIMA` function could not produce a valid model.
 
 ### Section e
 
@@ -562,11 +582,20 @@ Plot forecasts from an ARIMA(0,2,1) model with a constant. What happens?
 
 ```{r warning=F, message=F}
 aus_air_arima021 <- aus_airpassengers %>%
-  model(ARIMA(Passengers ~ pdq(0,2,1)))
+  model(ARIMA(Passengers ~ 1 + pdq(0,2,1)))
 
 report(aus_air_arima021)
 
+aus_air_fc_021 <- aus_air_arima021 %>% forecast(h=10)
+
+aus_air_fc_021
+
+autoplot(aus_air_fc_021, aus_airpassengers) +
+  labs(title="Number of passengers (in millions) from Australian air carriers", y="(in millions)" )
+
 ```
+
+The forecasts for the ARIMA(0,2,1) model with a constant shows an even greater increase in the forecasted values than compared to the initial ARIMA(0,2,1) with drift.
 
 # Exercise 9.8
 
@@ -584,7 +613,7 @@ us_gdp %>% autoplot(GDP)
 
 ### Section a
 
-if necessary, find a suitable Box-Cox transformation for the data;
+If necessary, find a suitable Box-Cox transformation for the data.
 
 ```{r warning=F, message=F}
 # Box Cox
@@ -616,12 +645,11 @@ us_gdp %>%
   autoplot()
 ```
 
-
 Results in $\lambda = 0.28$.
 
 ### Section b
 
-fit a suitable ARIMA model to the transformed data using `ARIMA()`;
+Fit a suitable ARIMA model to the transformed data using `ARIMA()`.
 
 ```{r warning=F, message=F}
 us_gdp_mod <- us_gdp %>% model(ARIMA(GDP_T))
