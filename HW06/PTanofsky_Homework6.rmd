@@ -605,7 +605,7 @@ For the United States GDP series (from `global_economy`):
 us_gdp <- global_economy %>%
   filter(Country == "United States") %>%
   mutate(GDP = GDP/1e9) # GDP in billions
-  
+
 head(us_gdp)
 
 us_gdp %>% autoplot(GDP)
@@ -653,13 +653,11 @@ Fit a suitable ARIMA model to the transformed data using `ARIMA()`.
 
 ```{r warning=F, message=F}
 us_gdp_mod <- us_gdp %>% model(ARIMA(GDP_T))
-
-report(us_gdp_mod)
 ```
 
 ### Section c
 
-try some other plausible models by experimenting with the orders chosen;
+Try some other plausible models by experimenting with the orders chosen.
 
 ```{r warning=F, message=F}
 us_gdp_mod111 <- us_gdp %>%
@@ -671,32 +669,72 @@ us_gdp_mod211 <- us_gdp %>%
 us_gdp_mod112 <- us_gdp %>%
   model(ARIMA(GDP_T ~ pdq(1,1,2)))
 
-us_gdp_mod101 <- us_gdp %>%
-  model(ARIMA(GDP_T ~ pdq(1,0,1)))
+us_gdp_mod210 <- us_gdp %>%
+  model(ARIMA(GDP_T ~ pdq(2,1,0)))
 ```
 
 ### Section d
 
-choose what you think is the best model and check the residual diagnostics;
+Choose what you think is the best model and check the residual diagnostics.
 
 ```{r warning=F, message=F}
+us_gdp_mod %>% gg_tsresiduals()
+report(us_gdp_mod)
+```
 
+```{r warning=F, message=F}
+us_gdp_mod111 %>% gg_tsresiduals()
+report(us_gdp_mod111)
+```
+
+```{r warning=F, message=F}
+us_gdp_mod211 %>% gg_tsresiduals()
+report(us_gdp_mod211)
+```
+
+```{r warning=F, message=F}
+us_gdp_mod112 %>% gg_tsresiduals()
+report(us_gdp_mod112)
+```
+
+```{r warning=F, message=F}
+us_gdp_mod210 %>% gg_tsresiduals()
+report(us_gdp_mod210)
 ```
 
 ### Section e
-
-produce forecasts of your fitted model. Do the forecasts look reasonable?
+Produce forecasts of your fitted model. Do the forecasts look reasonable?
 
 ```{r warning=F, message=F}
+us_gdp_fc <- us_gdp_mod %>% forecast(h=10)
 
+us_gdp_fc
+
+autoplot(us_gdp_fc, us_gdp) +
+  labs(title="US GDP", y="Box-Cox Transformation" )
 ```
 
 ### Section f
 
-compare the results with what you would obtain using `ETS()` (with no transformation).
+Compare the results with what you would obtain using `ETS()` (with no transformation).
 
 ```{r warning=F, message=F}
+fit_us_gdp <- us_gdp %>%
+  model(
+    SES = ETS(GDP ~ error("A") + trend("N") + season("N")),
+    Holt = ETS(GDP ~ error("A") + trend("A") + season("N")),
+    Damped = ETS(GDP ~ error("A") + trend("Ad") + season("N")),
+    ARIMA = ARIMA(GDP)
+  )
 
+# Forecast for 30 years to see the difference
+fc_us_gdp <- fit_us_gdp %>% forecast(h = 30)
+
+fc_us_gdp %>%
+  autoplot(us_gdp, level=NULL) +
+  labs(y = "$USD (in millions)",
+       title = "Forecasting US GDP") +
+  guides(colour = guide_legend(title = "Forecast"))
 ```
 
 
