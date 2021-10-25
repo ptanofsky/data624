@@ -75,7 +75,7 @@ head(atm1_data_ts)
 
 
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 
 atm1_data_ts <- atm1_data_ts %>%
   mutate(DATE = as_date(DATE)) %>%
@@ -94,12 +94,97 @@ atm1_dcmp <- atm1_data_ts %>%
 
 atm1_dcmp %>% components() %>% autoplot()
 
-autoplot(atm1_data_ts, Cash, colour = "gray") +
-  geom_line(aes(y=xx$season_adjust), colour = "#0072B2")
+
+components(atm1_dcmp) %>%
+  as_tsibble() %>%
+  autoplot(Cash, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
 
 # from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
 
+```{r warning=F, message=F}
+# Create training set (365 total, perhaps assume 1 year of data)
+# 292 days, yes, using the generating dates based on the integer values
+
+
+train_atm1 <- atm1_data_ts %>% 
+  filter_index("2079-05-03" ~ "2080-02-20")
+
+train_atm1
+
+# Fit the models
+fit_atm1 <- train_atm1 %>%
+  model(
+    Naive = NAIVE(Cash),
+    `Seasonal naive` = SNAIVE(Cash),
+    `Random walk` = RW(Cash ~ drift())
+  )
+
+fit_atm1_snaive <- train_atm1 %>%
+  model(SNAIVE(Cash))
+
+fit_atm1 %>% accuracy()
+
+# Check the residuals of Seasonal Naive
+fit_atm1_snaive %>% gg_tsresiduals()
+
+# Generate forecasts for 73 days
+fc_atm1 <- fit_atm1 %>% forecast(h = "71 days")
+
+fc_atm1 %>% accuracy(atm1_data_ts)
+
+# Plot forecasts against actual values
+fc_atm1 %>%
+  autoplot(train_atm1, level = NULL) +
+  autolayer(
+    filter_index(atm1_data_ts, "2080-02-21" ~ "2080-05-01"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+
+
+# Result: Not good, SNAIVE at least attempts the seasonal nature
+```
+
+
+
+```{r warning=F, message=F}
+# ETS
+
+fit_atm1_ets <- train_atm1 %>%
+  model(
+    add = ETS(Cash ~ error("A") + trend("N") + season("A")),
+    mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
+    damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
+  )
+
+# Forecast for 73 days
+fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "71 days")
+
+fc_atm1_ets %>%
+  autoplot(filter_index(train_atm1, "2079-12-01" ~ "2080-05-01"), level = NULL) +
+  autolayer(
+    filter_index(atm1_data_ts, "2079-12-01" ~ "2080-05-01"),
+    colour = "black"
+  ) +
+  labs(y="Billions $USD", title="GDP: China") +
+  guides(colour = guide_legend(title = "Forecast"))
+# Forecast over the test set
+# Measure the accuracy
+# Forecast beyond the data
+# NAIVE
+# SNAIVE
+# drift()
+# ETS
+# ARIMA
+
+```
 
 ```{r warning=F, message=F}
 atm2_data_ts <- atm_data_ts %>%
