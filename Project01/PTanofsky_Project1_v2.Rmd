@@ -266,7 +266,7 @@ Dimensions output
 
 - Dataset: ResidentialCustomerForecastLoad-624.xlsx
 
-Part B consists of a simple dataset of residential power usage for January 1998 until December 2013.  Your assignment is to model these data and a monthly forecast for 2014.  The data is given in a single file.  The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward.    Add this to your existing files above. 
+Part B consists of a simple dataset of residential power usage for January 1998 until December 2013.  Your assignment is to model these data and a monthly forecast for 2014. The data is given in a single file. The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward. Add this to your existing files above. 
 
 ```{r warning=F, message=F}
 # Read in data
@@ -275,10 +275,15 @@ power_data_raw <- read_excel("data/ResidentialCustomerForecastLoad-624.xlsx")
 # Change column name to 'Month'
 names(power_data_raw)[names(power_data_raw) == 'YYYY-MMM'] <- 'Month'
 
+# Display first 5 rows for visual inspection
 head(power_data_raw)
 
+# Display summary for initial assessment
 summary(power_data_raw)
 
+# Display dimensions for assessment
+# should be 16 years of data 1998-2013
+# Yep, 192/12 = 16
 dim(power_data_raw)
 # 192   3
 # KWH
@@ -288,8 +293,10 @@ power_data_ts <- power_data_raw %>%
   mutate(KWH = KWH/1e3) %>% # In thousands
   as_tsibble(index = Month)
 
+# Output first 5 rows of tsibble
 head(power_data_ts)
 
+# Inital plot of data
 power_data_ts %>%
   autoplot(KWH)
 
@@ -301,6 +308,97 @@ power_data_ts %>%
 First observations, data is Monthly, so I'd expect a seasonal component.
 1 month is missing KWH has 1 NA value (2008 Sep) Considering imputing with median Sep Value
 Outlier (with very small value in July 2010) Considering imputing with median Jul Value
+
+```{r warning=F, message=F}
+power_data_ts
+
+library(stringr)
+# I want all the September values
+sep_data <- power_data_ts %>%
+  filter(str_detect(Month, "Sep"))
+
+sep_data <- as_tibble(sep_data)
+
+sep_kwh_med <- sep_data %>% 
+  summarise(Median = median(KWH, na.rm = TRUE))
+
+sep_kwh_med
+# Median 7666.97
+#power_data_ts[power_data_ts$Month == "2008 Sep"] <- sep_kwh_med
+
+power_data_ts[129, 3] <- sep_kwh_med
+
+power_data_ts
+```
+
+```{r warning=F, message=F}
+# I want all the July values
+jul_data <- power_data_ts %>%
+  filter(str_detect(Month, "Jul"))
+
+jul_data <- as_tibble(jul_data)
+
+jul_kwh_med <- jul_data %>% 
+  summarise(Median = median(KWH, na.rm = TRUE))
+
+jul_kwh_med
+# Median 7678.623	
+
+power_data_ts[151, 3] <- jul_kwh_med
+
+power_data_ts %>% autoplot(KWH)
+```
+
+```{r warning=F, message=F}
+# STL
+power_data_ts %>%
+  model(stl = STL(KWH ~ trend(window=Inf) + season(period=12, window="periodic"))) %>% 
+  components() %>% autoplot()
+```
+
+```{r warning=F, message=F}
+
+power_dcmp <- power_data_ts %>%
+  model(stl = STL(KWH ~ trend(window=Inf) + season(period=12, window="periodic"))) 
+
+power_dcmp %>% components() %>% autoplot()
+
+components(power_dcmp) %>%
+  as_tsibble() %>%
+  autoplot(KWH, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "KWH (in thousands)", title = "Seasonally Adjusted Trendline")
+
+# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
+```
+
+```{r warning=F, message=F}
+# Seasonal differencing
+power_data_ts %>%
+  gg_tsdisplay(difference(KWH, 12),
+               plot_type='partial', lag=36) +
+  labs(title="Seasonally differenced", y="")
+
+
+# ARIMA model
+#power_data_ts %>% gg_tsdisplay()
+
+# https://otexts.com/fpp3/seasonal-arima.html
+arima_mod_power <- power_data_ts %>% model(ARIMA(KWH, stepwise=F, approx=F))
+
+report(arima_mod_power)
+
+arima_mod_power %>% gg_tsresiduals(lag=36)
+
+forecast(arima_mod_power, h=36) %>%
+  autoplot(power_data_ts) +
+  labs(title = "KWH Used",
+       y="KWH (in thousands)")
+```
+
+```{r warning=F, message=F}
+# Forecasting
+```
 
 # Part C – Waterflow (optional)
 
@@ -337,9 +435,7 @@ Part C consists of two data sets.  These are simple 2 columns sets, however they
 
 ```
 
-```{r warning=F, message=F}
 
-```
 
 
 
