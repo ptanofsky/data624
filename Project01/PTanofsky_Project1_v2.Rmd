@@ -20,7 +20,7 @@ Looking over previous homeworks to identify different forecasting approaches
 ```{r warning=F, message=F}
 # Import required R libraries
 library(fpp3)
-#library(tidyverse)
+library(tidyverse)
 library(readxl)
 ```
 
@@ -36,6 +36,11 @@ In part A, I want you to forecast how much cash is taken out of 4 different ATM 
 # Read in data
 atm_data_raw <- read_excel("data/ATM624Data.xlsx")
 
+df  <- data.frame(StartDate  =c("9/14/2019 10:18:59 AM","9/14/2019 3:18:59 PM"), 
+                  EndDate= c("9/18/2019 2:27:14 AM","9/18/2019 1:27:14 PM"))
+
+atm_data_raw <- atm_data_raw %>% mutate(DATE = as.Date(DATE, origin = "1899-12-30"))
+
 # Initial output to see data
 head(atm_data_raw)
 
@@ -48,6 +53,8 @@ dim(atm_data_raw)
 # Define as tsibble
 atm_data_ts <- atm_data_raw %>%
   as_tsibble(index = DATE, key = ATM)
+
+atm_data_ts
 ```
 
 ```{r warning=F, message=F}
@@ -110,7 +117,7 @@ components(atm1_dcmp) %>%
 
 
 train_atm1 <- atm1_data_ts %>% 
-  filter_index("2079-05-03" ~ "2080-02-20")
+  filter_index("2009-05-01" ~ "2010-02-17")
 
 train_atm1
 
@@ -139,7 +146,7 @@ fc_atm1 %>% accuracy(atm1_data_ts)
 fc_atm1 %>%
   autoplot(train_atm1, level = NULL) +
   autolayer(
-    filter_index(atm1_data_ts, "2080-02-21" ~ "2080-05-01"),
+    filter_index(atm1_data_ts, "2010-02-18" ~ "2010-04-30"),
     colour = "black"
   ) +
   labs(
@@ -168,9 +175,9 @@ fit_atm1_ets <- train_atm1 %>%
 fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "71 days")
 
 fc_atm1_ets %>%
-  autoplot(filter_index(train_atm1, "2079-12-01" ~ "2080-05-01"), level = NULL) +
+  autoplot(filter_index(train_atm1, "2009-12-01" ~ "2010-04-30"), level = NULL) +
   autolayer(
-    filter_index(atm1_data_ts, "2079-12-01" ~ "2080-05-01"),
+    filter_index(atm1_data_ts, "2009-12-01" ~ "2010-04-30"),
     colour = "black"
   ) +
   labs(y="Billions $USD", title="GDP: China") +
@@ -260,6 +267,8 @@ Final 14 entries are NA, NA (DATE of 40299 and higher are NA, NA)
 
 Dimensions output
 [1] 1474    3
+
+So remove the last 14 and all that remains is 1460. And 1460 / 4 is 365, so thus one year.
 
 
 # Part B – Forecasting Power
@@ -410,7 +419,29 @@ Part C consists of two data sets.  These are simple 2 columns sets, however they
 
 ```
 
+```{r warning=F, message=F}
+# Read in data
+pipe1_data_raw <- read_excel("data/Waterflow_Pipe1.xlsx")
+pipe2_data_raw <- read_excel("data/Waterflow_Pipe2.xlsx")
 
+# Initial output to see data
+head(pipe1_data_raw)
+head(pipe2_data_raw)
+
+summary(pipe1_data_raw)
+summary(pipe2_data_raw)
+
+dim(pipe1_data_raw)
+dim(pipe2_data_raw)
+# 1474    3
+#Cash in hundreds
+```
+# Define as tsibble
+atm_data_ts <- atm_data_raw %>%
+  as_tsibble(index = DATE, key = ATM)
+
+atm_data_ts
+```
 
 
 
