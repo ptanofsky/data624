@@ -6,6 +6,7 @@ date: "`r format(Sys.time(), '%d %B %Y')`"
 output: html_document
 ---
 
+This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday October 31. I will accept late submissions with a penalty until the meetup after that when we review some projects.
 
 ```{r warning=F, message=F}
 # Import required R libraries
@@ -13,9 +14,8 @@ library(fpp3)
 library(tidyverse)
 library(readxl)
 library(seasonal)
+library(stringr)
 ```
-
-This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday October 31. I will accept late submissions with a penalty until the meetup after that when we review some projects.
 
 # Part A – ATM Forecast
 
@@ -32,7 +32,7 @@ atm_data_raw <- read_excel("data/ATM624Data.xlsx")
 atm_data_raw <- atm_data_raw %>% mutate(DATE = as.Date(DATE, origin = "1899-12-30"))
 
 # Initial output to see data
-head(atm_data_raw)
+#head(atm_data_raw)
 
 # Output summary for high level assessment
 summary(atm_data_raw)
@@ -43,14 +43,34 @@ dim(atm_data_raw)
 #Cash in hundreds
 ```
 
+Dates of dataset start at 2009-05-01 and end with 2010-05-14. This indicates 379 dates, which is 14 more than a single year of 365 days.
+
+Dimensions of the initial dataset indicate 1474 observations, which again indicates more than a single year's worth of data. The 3 columns are `DATE`, `ATM`, and  `Cash`. The `DATE` indicates the specific data, the `ATM` indicates which of the 4 ATMs, and `Cash` represents the total amount withdrawn for the given date and ATM.
+
+
+Cash 19 NA's
+
+Data observations:
+ATM1: 3 Cash NA values
+ATM2: 2 Cash NA values
+ATM3: Only 3 Cash values with something above zero
+ATM4: Many Cash values with a decimal, but not all, something weird there, also ATM4 appears to have 1 really crazy outlier
+
+
+Total by day and see if there is an overall relationship to be understood
+
 ```{r warning=F, message=F}
 # Define as tsibble with DATE as index
 atm_data_ts <- atm_data_raw %>%
   as_tsibble(index = DATE, key = ATM)
 
 # Output tsibble to confirm proper format and definition
-atm_data_ts
+atm_data_ts %>%
+  filter(DATE > "2010-04-30")
 ```
+A closer look at the data shows 14 observations starting with date 2010-05-01 and ending on 2010-05-14 do not indicate an ATM nor a Cash amount, thus these 14 observations will be ignored in the upcoming evaluation. The removal of thse 14 observations also makes for a cleaner dataset, as now the total observations is 1460, which is exacting 365 for each of the 4 ATMs.
+
+## ATM1
 
 ```{r warning=F, message=F}
 # Filter to ATM1 data
@@ -59,12 +79,27 @@ atm1_data_ts <- atm_data_ts %>%
 
 # Output summary
 summary(atm1_data_ts)
-
-#atm1_data_ts
-
-atm1_data_ts %>%
-  autoplot(Cash)
 ```
+
+The summary of data for ATM1 confirms the 365 days (single year) of observations and also indicates 3 missing Cash values.
+
+```{r warning=F, message=F}
+atm1_data_ts$DATE[is.na(atm1_data_ts$Cash)]
+```
+
+The 3 dats with missing Cash values are displayed above. Not sure the significance of the missing data occurring in a small window of time, so will consider imputation.
+
+```{r warning=F, message=F}
+atm1_data_ts %>%
+  autoplot(Cash) +
+  labs(y = "Cash (in hundreds $USD)", title = "ATM1")
+```
+
+Initial plot of the ATM1 data appears to show a weekly seasonal component along with a dip between October 2009 and January 2010. There does not appear to be a clear increasing or decreasing trend.
+
+### Impute Missing Data
+
+Given the low volume of missing values, three, I will simply impute the data with the median value of the ATM1 dataset.
 
 ```{r warning=F, message=F}
 # Calculate median value for ATM1
@@ -74,23 +109,23 @@ median <- median(atm1_data_ts$Cash, na.rm=TRUE)
 atm1_data_ts$Cash[is.na(atm1_data_ts$Cash)] <- median
 
 summary(atm1_data_ts)
-
-head(atm1_data_ts)
 ```
 
+Summary output confirms no missing data for ATM1 Cash amounts.
 
+Simply updating the ATM1 data tsibble is defined properly.
 
 ```{r warning=F, message=F}
 
 atm1_data_ts <- atm1_data_ts %>%
   mutate(DATE = as_date(DATE)) %>%
   update_tsibble(index = DATE)
-
-atm1_data_ts
+#atm1_data_ts
 ```
 
+### Decomposition
 
-
+To better understand the trend and seasonal nature of the ATM1 dataset, decomposition is performed.
 
 ```{r warning=F, message=F}
 # From: https://stats.stackexchange.com/questions/494013/control-the-period-for-daily-time-series-in-tsibbles
@@ -98,39 +133,52 @@ atm1_dcmp <- atm1_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))) 
 
 atm1_dcmp %>% components() %>% autoplot()
+```
 
+STL decomposition shows the remainder plot has the most impact on the data based on the gray bar on the left. The seasonal plot shows a clear seasonal pattern, but while the seasonal pattern remains the same, the remainder plot shows greater variance toward the end of plot, beginning in February 2010. The trend line confirms no real trend present in the dataset.
+
+```{r warning=F, message=F}
 components(atm1_dcmp) %>%
   as_tsibble() %>%
   filter_index("2009-05-01" ~ "2010-04-30") %>%
   autoplot(Cash, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
   labs(y = "Cash (in hundreds $USD)", title = "Seasonally Adjusted Trendline")
+```
 
+The above seasonally adjusted trendline confirms that despite a few outliers through December 2009, the seasonal component does well to address the weekly nature of the data, but the plot above indicates starting in February 2010, the seasonal component does not properly define the dataset. Based on the above plot, a new weekly pattern appears to emerge in February 2010.
+
+```{r warning=F, message=F}
 components(atm1_dcmp) %>%
   as_tsibble() %>%
   filter_index("2010-02-16" ~ "2010-04-30") %>%
   autoplot(Cash, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
   labs(y = "Cash (in hundreds $USD)", title = "Seasonally Adjusted Trendline")
-
-# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
 
-Above plot shows that the seasonally adjusted data does not account for the weekly seasonal nature for the last three months. There is a shift.
+Above plot shows that the seasonally adjusted data does not account for the weekly seasonal nature for the last three months. Clearly a shift in the weekly seasonal pattern has occurred.
 
 ```{r warning=F, message=F}
 atm1_data_ts %>% ACF() %>% autoplot()
 ```
 
+The ACF of the ATM1 data shows a clear correlation at lags 7, 14, and 21, which is expected for seasonal data following a weekly pattern.
+
 ```{r warning=F, message=F}
 atm1_data_ts %>% PACF() %>% autoplot()
 ```
 
+The PACF plot re-confirms the correlations at lag 7 and 14. Interesting, correlation also appears at lags 2 and 5.
+
 ```{r warning=F, message=F}
 atm1_data_ts %>% gg_season(Cash, period = "week") +
-  theme(legend.position = "none") +
   labs(y="$USD (in hundreds)", title="ATM Withdrawals")
+```
 
+To better understand the weekly seasonal pattern, the `gg_season` plot above does show some sort of shift on Tuesday and Thursday.
+
+```{r warning=F, message=F}
 atm1_data_ts %>%
   gg_subseries(period = "week") +
   labs(
@@ -139,44 +187,52 @@ atm1_data_ts %>%
   )
 ```
 
+The ``gg_subseries` plot confirms the shift in February occurs on Tuesday, Wednesday, and Thursday. The other days of the week indicate some variance and outliers, but nothing as dramatic as Tuesday through Thursday.
+
+### Train and Test Model
+
+Before forecasting the data for May 2010, I want to train and test the different model functions for proper evaluation. The models are trained on 292 days, or approximately 80% of the year represented.
+
 ```{r warning=F, message=F}
 # Create training set (assume 1 year of data)
 # 292 days for training, approx. 80% of data
 train_atm1 <- atm1_data_ts %>% 
   filter_index("2009-05-01" ~ "2010-02-17")
 
-train_atm1
+#train_atm1
 
 # Fit the models
 fit_atm1 <- train_atm1 %>%
   model(
     Naive = NAIVE(Cash),
     `Seasonal naive` = SNAIVE(Cash),
-    `Random walk` = RW(Cash ~ drift()),
+    `Random walk` = RW(Cash),
     Arima = ARIMA(Cash),
     ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")),
     ETS_Mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
     ETS_Damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
   )
 
-fit_atm1_arima <- train_atm1 %>%
-  model(ARIMA(Cash))
-
 fit_atm1 %>% accuracy()
+```
 
-# Check the residuals of Seasonal Naive
-fit_atm1_arima %>% gg_tsresiduals()
+Using the different model functions from the Hyndman textbook, the best performing model based on RMSE is the ETS model with dampening. Overall, the three ETS models and the ARIMA model all perform well in comparison. The seasonal naive model also performe well with an RMSE slightly higher than the ARIMA model and the three ETS models.
 
+```{r warning=F, message=F}
 # Generate forecasts for 72 days
 fc_atm1 <- fit_atm1 %>% forecast(h = "72 days")
 
 fc_atm1 %>% accuracy(atm1_data_ts)
+```
 
+The accuracy of the models on the test dataset shows ARIMA performing the best with an RMSE of 50.77. The three ETS models do also perform well.
+
+```{r warning=F, message=F}
 # Plot forecasts against actual values
 fc_atm1 %>%
-  autoplot(filter_index(train_atm1, "2010-02-18" ~ "2010-04-30"), level = NULL) +
+  autoplot(filter_index(train_atm1, "2010-02-01" ~ "2010-04-30"), level = NULL) +
   autolayer(
-    filter_index(atm1_data_ts, "2010-02-18" ~ "2010-04-30"),
+    filter_index(atm1_data_ts, "2010-02-10" ~ "2010-04-30"),
     colour = "black"
   ) +
   labs(
@@ -186,37 +242,21 @@ fc_atm1 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-RMSE of ARIMA model on test data: 21.91975, next best is RMSE of Seasonal Naive 28.11888.
+So plotting the seven forecasts along with the original dataset shows the seasonal pattern of the forecasts does not match the seasonal pattern of the actual dataset. Based on the observations in the decomposition section, the weekly pattern has changed, and thus training the model on the first 80% of the data actually misses the new pattern found in the data. Further investigation is needed.
 
-The forecasts don't line up with the actual data well. The seasonal nature of the actual data doesn't match the seasonal nature of the forecasted data. Further investigation is needed.
+```{r warning=F, message=F}
+fit_atm1_arima <- train_atm1 %>%
+  model(ARIMA(Cash))
 
-
-```{r warning=F, message=F, eval=F}
-### REMOVE THIS SECTION, AS I'VE PUT ALL THE MODELS INTO ONE INITIAL ATTEMPT #####
-# ETS
-
-fit_atm1_ets <- train_atm1 %>%
-  model(
-    add = ETS(Cash ~ error("A") + trend("N") + season("A")),
-    mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
-    damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
-  )
-
-# Forecast for 73 days
-fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "73 days")
-
-fc_atm1_ets %>%
-  autoplot(filter_index(train_atm1, "2009-12-01" ~ "2010-04-30"), level = NULL) +
-  autolayer(
-    filter_index(atm1_data_ts, "2009-12-01" ~ "2010-04-30"),
-    colour = "black"
-  ) +
-  labs(y="Billions $USD", title="GDP: China") +
-  guides(colour = guide_legend(title = "Forecast"))
+# Check the residuals of Seasonal Naive
+fit_atm1_arima %>% gg_tsresiduals()
 ```
 
+To further confirm the assumption of a bad model, I've taken the ARIMA model, the best performing based on RMSE, and displayed the residuals above. The ACF plot of the residuals clearly indicates a correlation exists at lags 8 and 20. This indicates the model isn't quite capturing the correlation of the test data properly.
 
+### Train and Test Model: Second Attempt
 
+Given the decomposition and the model evaluations indicate a change in seasonal pattern sometime in February 2010, I will attempt to train and test on just the data beginning on 2010-02-16. Yes, this certainly reduces the amount of data used to build the model, but I believe may better capture the change in the weekly pattern and thus provide better forecasts for the month of May 2010.
 
 ```{r warning=F, message=F}
 # ATM1 train on 2010-02-16 to 2010-04-30 (end)
@@ -227,22 +267,6 @@ new_seasonal_atm1 <- atm1_data_ts %>%
 train_atm1 <- atm1_data_ts %>% 
   filter_index("2010-02-16" ~ "2010-04-14")
 
-# Consider Box-Cox
-lambda <- new_seasonal_atm1 %>%
-  features(Cash, features = guerrero) %>%
-  pull(lambda_guerrero)
-
-new_seasonal_atm1 %>%
-  autoplot(box_cox(Cash, lambda)) +
-  labs(y = "",
-       title = latex2exp::TeX(paste0(
-         "Transformed ATM1 withdrawals with $\\lambda$ = ",
-         round(lambda,2))))
-```
-
-Applying Box-Cox, the SNaive RMSE went up to 10.08937, without Box-Cox 9.975
-
-```{r warning=F, message=F}
 # Fit the models
 fit_atm1 <- train_atm1 %>%
   model(
@@ -254,20 +278,26 @@ fit_atm1 <- train_atm1 %>%
   )
 
 report(fit_atm1)
+```
 
+Now using only the 5 top performing models due to the seasonal nature of the data, the ARIMA model performs the best of the 4 models by evaluating the AICc of 447.
+
+```{r warning=F, message=F}
 fit_atm1 %>% accuracy()
+```
 
-fit_atm1_arima<- train_atm1 %>%
-  model(ARIMA(Cash))
+The ARIMA model performs the best on the training set with an RMSE of 16.05, while the ETS Additive performs almost as well as the ARIMA model. The Seasonal Naive model performs third best and the ETS with dampening is clearly not doing well compared to the other four models.
 
-# Check the residuals of Seasonal Naive
-fit_atm1_arima %>% gg_tsresiduals()
-
+```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks), so we'll see if it picks up the seasonal nature
 fc_atm1 <- fit_atm1 %>% forecast(h = "16 days")
 
 fc_atm1 %>% accuracy(new_seasonal_atm1)
+```
 
+For the accuracy of the five models on the test set, the Seasonal Naive model actually performs the best with an RMSE of 9.64, while ARIMA and ETS Additive, also perform well.
+
+```{r warning=F, message=F}
 # Plot forecasts against actual values
 fc_atm1 %>%
   autoplot(filter_index(train_atm1, "2010-04-01" ~ "2010-04-30"), level = NULL) +
@@ -282,24 +312,67 @@ fc_atm1 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+The plot of the test forecasts confirms the models are correctly capturing the seasonal nature of the data near the end of the dataset.
+
+```{r warning=F, message=F}
+fit_atm1_arima<- train_atm1 %>%
+  model(ARIMA(Cash))
+
+# Check the residuals of ARIMA
+fit_atm1_arima %>% gg_tsresiduals()
+```
+
+As above, I've displayed the residuals of the ARIMA model to assess the appropriateness of the model. The plot of Innovation residuals appears to follow white noise after the first 10 observations or so. The ACF plot indicates no correlation outside of the confidence intervals.
+
 ```{r warning=F, message=F, eval=F}
+# Consider Box-Cox
+lambda <- new_seasonal_atm1 %>%
+  features(Cash, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+new_seasonal_atm1 %>%
+  autoplot(box_cox(Cash, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed ATM1 withdrawals with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
+Applying Box-Cox to see if I can squeeze out a little better performance on the test data.
+
+```{r warning=F, message=F}
 # Forecast for May 2010
-fit_atm1 <- new_seasonal_atm1 %>%
-  model(ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")),
-        ARIMA(Cash))
+fit_atm1_bc <- train_atm1 %>%
+  model(
+    `Seasonal naive` = SNAIVE(box_cox(Cash, lambda)),
+    ARIMA(box_cox(Cash, lambda)),
+    ETS_Add = ETS(box_cox(Cash, lambda) ~ error("A") + trend("N") + season("A"))
+  )
 
-report(fit_atm1)
+report(fit_atm1_bc)
+```
 
-fit_atm1 %>% accuracy()
+The AICc of the ARIMA model with Box-Cox transformation has improved from 447.73 to 417.98. A promising sign.
 
-# Check the residuals of Seasonal Naive
-#fit_atm1 %>% gg_tsresiduals()
 
-# Generate forecasts for 31 days of May 2010
-fc_atm1 <- fit_atm1 %>% forecast(h = "31 days")
+```{r warning=F, message=F}
+fit_atm1_bc %>% accuracy()
+```
 
+The accuracy of the models with Box-Cox show little to no improvement over the models without transformations on the training set. The RMSE of the ARIMA model with the transformation actually increases from 16.04555 to 16.06325 as noted above.
+
+```{r warning=F, message=F}
+# Generate forecasts for the next 16 days
+fc_atm1_bc <- fit_atm1_bc %>% forecast(h = "16 days")
+
+fc_atm1_bc %>% accuracy(new_seasonal_atm1)
+```
+
+The RMSE of the ARIMA model with Box-Cox transformation on the test data does improve the RMSE compared to the ARIMA model without transformation from 12.812248 to 11.53609.
+
+```{r warning=F, message=F}
 # Plot forecasts against actual values
-fc_atm1 %>%
+fc_atm1_bc %>%
   autoplot(filter_index(new_seasonal_atm1, "2010-04-01" ~ "2010-04-30"), level = NULL) +
   autolayer(
     filter_index(new_seasonal_atm1, "2010-04-01" ~ "2010-04-30"),
@@ -312,52 +385,32 @@ fc_atm1 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+The above plot shows the forecasts of the models with transformation along with the actual data. Similar to the plot from the models with transformations, the forecasts do follow the seasonal pattern of the data.
 
+### ATM1 Conclusion
 
-```{r warning=F, message=F, eval=F}
-# ETS: for just the final 76 days also
+Given the assignment is to forecast the data for May 2010 from the provided data, I believe the models generated from the final two and a half months is the appropriate approach. Clearly, a shift in the weekly pattern occurs in February 2010 and without any additional context or history, I assume that shift will continue through May 2010. As the forecast is only 1 month or approximately four more weeks from the end of the provided data, then I choose to believe that new pattern will persist for the next four weeks through May 2010.
 
-fit_atm1_ets <- train_atm1 %>%
-  model(
-    add = ETS(Cash ~ error("A") + trend("N") + season("A")),
-    mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
-    damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
-  )
-
-fit_atm1_ets %>% accuracy()
-
-# Forecast for 16 days
-fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "16 days")
-
-fc_atm1_ets %>% accuracy(atm1_data_ts)
-
-fc_atm1_ets %>%
-  autoplot(filter_index(train_atm1, "2010-02-16" ~ "2010-04-30"), level = NULL) +
-  autolayer(
-    filter_index(atm1_data_ts, "2010-02-16" ~ "2010-04-30"),
-    colour = "black"
-  ) +
-  labs(y="$USD (in hundreds)", title="ATM1 Withdrawals Forecast") +
-  guides(colour = guide_legend(title = "Forecast"))
-
-
-
-```
+## ATM2
 
 ```{r warning=F, message=F}
 atm2_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM2')
 
 atm2_data_ts %>%  autoplot(Cash)
+```
 
+```{r warning=F, message=F}
 # Calculate median value for ATM2
 median <- median(atm2_data_ts$Cash, na.rm=TRUE)
 
 # Set NAs to median
 atm2_data_ts$Cash[is.na(atm2_data_ts$Cash)] <- median
 
-atm2_data_ts
+#atm2_data_ts
+```
 
+```{r warning=F, message=F}
 atm2_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
         ) %>% 
@@ -368,13 +421,19 @@ Same thing as ATM1, the seasonal nature of the data changes in the final few mon
 
 ```{r warning=F, message=F}
 atm2_data_ts %>% ACF() %>% autoplot()
+```
 
+```{r warning=F, message=F}
 atm2_data_ts %>% PACF() %>% autoplot()
+```
 
+```{r warning=F, message=F}
 atm2_data_ts %>% gg_season(Cash, period = "week") +
   theme(legend.position = "none") +
   labs(y="$ (in hundreds)", title="ATM Withdrawals")
+```
 
+```{r warning=F, message=F}
 atm2_data_ts %>%
   gg_subseries(period = "week") +
   labs(
@@ -384,64 +443,62 @@ atm2_data_ts %>%
 ```
 
 ```{r warning=F, message=F}
-# From: https://stats.stackexchange.com/questions/494013/control-the-period-for-daily-time-series-in-tsibbles
 atm2_dcmp <- atm2_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))) 
 
 atm2_dcmp %>% components() %>% autoplot()
+```
 
+```{r warning=F, message=F}
 components(atm2_dcmp) %>%
   as_tsibble() %>%
   filter_index("2009-05-01" ~ "2010-04-30") %>%
   autoplot(Cash, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
   labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
+```
 
+```{r warning=F, message=F}
 components(atm2_dcmp) %>%
   as_tsibble() %>%
   filter_index("2010-02-16" ~ "2010-04-30") %>%
   autoplot(Cash, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
   labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
-
-# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
+
+## ATM3
 
 ```{r warning=F, message=F}
 atm3_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM3')
 
 atm3_data_ts %>% autoplot(Cash)
-
-atm3_data_ts <- atm_data_ts %>%
-  filter(ATM == 'ATM3', Cash > 0)
-
-atm3_data_ts %>% autoplot(Cash)
-
-summary(atm3_data_ts)
-
-atm3_data_ts
-# Literally just 3 values above 0
 ```
+
+### Remove data
 
 ```{r warning=F, message=F}
 atm3_data_ts <- atm_data_ts %>%
-  filter(ATM == 'ATM3')
-
-atm3_data_ts %>% autoplot(Cash)
-
-atm3_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM3', Cash > 0)
 
 atm3_data_ts %>% autoplot(Cash)
+```
 
+```{r warning=F, message=F}
 summary(atm3_data_ts)
+```
 
+```{r warning=F, message=F}
 atm3_data_ts
-# Literally just 3 values above 0
+```
 
+Literally just 3 values above 0
+
+### ATM3 Model
+
+```{r warning=F, message=F}
 fit_atm3 <- atm3_data_ts %>% model(MEAN(Cash))
-
 ```
 
 ```{r warning=F, message=F}
@@ -460,38 +517,48 @@ fc_atm3 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+### ATM3 Conclusion
+
 There's only 3 values with data above zero, so I'm assuming there was absolutely no activity but the ATM3 existed, or else it would have NA.
+
+## ATM4
 
 ```{r warning=F, message=F}
 atm4_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM4')
 
 atm4_data_ts %>% autoplot(Cash)
+```
 
+```{r warning=F, message=F}
 summary(atm4_data_ts)
+```
 
+```{r warning=F, message=F}
 atm4_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
         ) %>% 
   components() %>% autoplot()
 
-atm4_data_ts
+#atm4_data_ts
+```
+
+
+```{r warning=F, message=F}
+atm4_data_ts %>% ACF() %>% autoplot()
 ```
 
 ```{r warning=F, message=F}
-median <- median(atm4_data_ts$Cash, na.rm=TRUE)
-
-# Set NAs to median
-atm4_data_ts$Cash[atm4_data_ts$Cash > 3000] <- median
-
-atm4_data_ts %>% ACF() %>% autoplot()
-
 atm4_data_ts %>% PACF() %>% autoplot()
+```
 
+```{r warning=F, message=F}
 atm4_data_ts %>% gg_season(Cash, period = "week") +
   theme(legend.position = "none") +
   labs(y="$ (in hundreds)", title="ATM Withdrawals")
+```
 
+```{r warning=F, message=F}
 atm4_data_ts %>%
   gg_subseries(period = "week") +
   labs(
@@ -500,55 +567,25 @@ atm4_data_ts %>%
   )
 ```
 
-
-
-Summary output
-      DATE           ATM                 Cash        
- Min.   :39934   Length:1474        Min.   :    0.0  
- 1st Qu.:40026   Class :character   1st Qu.:    0.5  
- Median :40118   Mode  :character   Median :   73.0  
- Mean   :40118                      Mean   :  155.6  
- 3rd Qu.:40210                      3rd Qu.:  114.0  
- Max.   :40312                      Max.   :10919.8  
-                                    NA's   :19       
-
-Date 39934 to 40312
-
-379 dates
-
-ATM1, ATM2, ATM3, ATM4, NA
-
-Cash 19 NA's
-
-Data observations:
-ATM1: 3 Cash NA values
-ATM2: 2 Cash NA values
-ATM3: Only 3 Cash values with something above zero
-ATM4: Many Cash values with a decimal, but not all, something weird there, also ATM4 appears to have 1 really crazy outlier
-Final 14 entries are NA, NA (DATE of 40299 and higher are NA, NA)
-
-Dimensions output
-[1] 1474    3
-
-So remove the last 14 and all that remains is 1460. And 1460 / 4 is 365, so thus one year.
-
-Total by day and see if there is an overall relationship to be understood
+### Impute outlier and missing data
 
 ```{r warning=F, message=F}
 # Calculate median value for ATM
 # Straightforward approach to impute data
-median <- median(atm_data_ts$Cash, na.rm=TRUE)
 
 # Set NAs to median
-atm_data_ts$Cash[is.na(atm_data_ts$Cash)] <- median
+atm4_data_ts$Cash[is.na(atm_data_ts$Cash)] <- median
 
 # Get rid of outlier from ATM4
-
-atm_data_ts$Cash[atm_data_ts$Cash > 5000] <- median 
-
+atm4_data_ts$Cash[atm_data_ts$Cash > 3000] <- median 
 
 atm_data_ts %>% autoplot(Cash)
+```
 
+
+## Overall daily totals across all four ATMs
+
+```{r warning=F, message=F}
 atm_data_total_by_day <- atm_data_ts %>%
   index_by(DATE) %>%
   summarize(Cash_Total = sum(Cash))
@@ -578,7 +615,7 @@ components(atm_dcmp) %>%
 
 ```
 
-# Part B – Forecasting Power
+# Part B – Residential Customer Power
 
 - Dataset: ResidentialCustomerForecastLoad-624.xlsx
 
@@ -592,11 +629,13 @@ power_data_raw <- read_excel("data/ResidentialCustomerForecastLoad-624.xlsx")
 names(power_data_raw)[names(power_data_raw) == 'YYYY-MMM'] <- 'Month'
 
 # Display first 5 rows for visual inspection
-head(power_data_raw)
+#head(power_data_raw)
 
 # Display summary for initial assessment
 summary(power_data_raw)
+```
 
+```{r warning=F, message=F}
 # Display dimensions for assessment
 # should be 16 years of data 1998-2013
 # Yep, 192/12 = 16
@@ -610,25 +649,28 @@ power_data_ts <- power_data_raw %>%
   as_tsibble(index = Month)
 
 # Output first 5 rows of tsibble
-head(power_data_ts)
+#head(power_data_ts)
 
 # Inital plot of data
 power_data_ts %>%
   autoplot(KWH)
+```
 
+```{r warning=F, message=F}
+# DO I NEED OR WANT THIS PLOT?
 power_data_ts %>%
-  filter_index("2010" ~ "2011") %>%
-  print()
+  filter_index("2010" ~ "2011")
 ```
 
 First observations, data is Monthly, so I'd expect a seasonal component.
 1 month is missing KWH has 1 NA value (2008 Sep) Considering imputing with median Sep Value
 Outlier (with very small value in July 2010) Considering imputing with median Jul Value
 
-```{r warning=F, message=F}
-power_data_ts
+### Impute data
 
-library(stringr)
+```{r warning=F, message=F}
+#power_data_ts
+
 # I want all the September values
 sep_data <- power_data_ts %>%
   filter(str_detect(Month, "Sep"))
@@ -665,7 +707,7 @@ power_data_ts[151, 3] <- jul_kwh_med
 power_data_ts %>% autoplot(KWH)
 ```
 
-Perhaps a Box-Cox is needed here, there does seem to be trending upward
+Perhaps a Box-Cox is needed here, there does seem to be increasing variance
 
 ```{r warning=F, message=F}
 # STL
@@ -674,11 +716,11 @@ power_data_ts %>%
   components() %>% autoplot()
 ```
 
-```{r warning=F, message=F}
+Redundant with above and below.
 
+```{r warning=F, message=F}
 power_dcmp <- power_data_ts %>%
   model(stl = STL(KWH ~ trend(window=Inf) + season(period=12, window="periodic"))) 
-
 power_dcmp %>% components() %>% autoplot()
 
 components(power_dcmp) %>%
@@ -686,8 +728,6 @@ components(power_dcmp) %>%
   autoplot(KWH, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
   labs(y = "KWH (in thousands)", title = "Seasonally Adjusted Trendline")
-
-# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
 
 Seasonally adjusted doesn't look too bad
@@ -700,6 +740,8 @@ power_data_ts %>%
   labs(title="Seasonally differenced", y="")
 
 ```
+
+```{r warning=F, message=F}
 # ARIMA model
 #power_data_ts %>% gg_tsdisplay()
 
@@ -714,22 +756,21 @@ forecast(arima_mod_power, h=36) %>%
   autoplot(power_data_ts) +
   labs(title = "KWH Used",
        y="KWH (in thousands)")
+```
 
+### Train and Test Model
 
 ```{r warning=F, message=F}
-# Forecasting
-# ATM1 train on 2010-02-16 to 2010-04-30 (end)
-# 15 + 31 + 30 = 76 days, 80% is 61 days
-# Create training set (365 total, perhaps assume 1 year of data)
-# 292 days, yes, using the generating dates based on the integer values
-
-
 # Train on 154 months, which is 12 years and 8 months (80% of the total)
 # Total is 192 months (16 years)
 
 train_power_data <- power_data_ts %>% 
   filter_index("1998-Jan" ~ "2010-Oct")
+```
 
+Box-Cox
+
+```{r warning=F, message=F}
 lambda <- power_data_ts %>%
   features(KWH, features = guerrero) %>%
   pull(lambda_guerrero)
@@ -752,14 +793,20 @@ fit_power <- train_power_data %>%
   )
 
 fit_power$Arima_BC
+```
 
+```{r warning=F, message=F}
 fit_power$Arima
+```
 
+```{r warning=F, message=F}
 #fit_atm1_snaive <- train_atm1 %>%
 #  model(SNAIVE(Cash))
 
 fit_power %>% accuracy()
+```
 
+```{r warning=F, message=F}
 # Check the residuals of Seasonal Naive
 #fit_atm1_snaive %>% gg_tsresiduals()
 
@@ -767,7 +814,9 @@ fit_power %>% accuracy()
 fc_power <- fit_power %>% forecast(h = "38 months")
 
 fc_power %>% accuracy(power_data_ts)
+```
 
+```{r warning=F, message=F}
 # Plot forecasts against actual values
 fc_power %>%
   autoplot(power_data_ts, level = NULL) +
@@ -787,6 +836,7 @@ fc_power %>%
 
 ARIMA_BC is the best RMSE
 Need to try the ETS
+
 
 # Part C – Waterflow (optional)
 
