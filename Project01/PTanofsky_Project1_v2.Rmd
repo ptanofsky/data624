@@ -1,20 +1,10 @@
 ---
-title: "DATA 624 Project 1 v1"
+title: "DATA 624 Project 1 v2"
 subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 output: html_document
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-Looking over previous homeworks to identify different forecasting approaches
-
-- Box-cox transformations
-
-- decomposition
 
 
 ```{r warning=F, message=F}
@@ -22,53 +12,61 @@ Looking over previous homeworks to identify different forecasting approaches
 library(fpp3)
 library(tidyverse)
 library(readxl)
+library(seasonal)
 ```
 
-This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday October 31.  I will accept late submissions with a penalty until the meetup after that when we review some projects.
+This project consists of 3 parts - two required and one bonus and is worth 15% of your grade.  The project is due at 11:59 PM on Sunday October 31. I will accept late submissions with a penalty until the meetup after that when we review some projects.
 
 # Part A – ATM Forecast
 
 - Dataset: ATM624Data.xlsx
 
-In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010.  The data is given in a single file.  The variable `Cash` is provided in hundreds of dollars, other than that it is straight forward. I am being somewhat ambiguous on purpose to make this have a little more business feeling. Explain and demonstrate your process, techniques used and not used, and your actual forecast. I am giving you data via an Excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file  Also please submit the forecast which you will put in an Excel readable file.
+In part A, I want you to forecast how much cash is taken out of 4 different ATM machines for May 2010. The data is given in a single file. The variable `Cash` is provided in hundreds of dollars, other than that it is straight forward. I am being somewhat ambiguous on purpose to make this have a little more business feeling. Explain and demonstrate your process, techniques used and not used, and your actual forecast. I am giving you data via an Excel file, please provide your written report on your findings, visuals, discussion and your R code via an RPubs link along with the actual.rmd file. Also please submit the forecast which you will put in an Excel readable file.
 
 ```{r warning=F, message=F}
 # Read in data
 atm_data_raw <- read_excel("data/ATM624Data.xlsx")
 
-df  <- data.frame(StartDate  =c("9/14/2019 10:18:59 AM","9/14/2019 3:18:59 PM"), 
-                  EndDate= c("9/18/2019 2:27:14 AM","9/18/2019 1:27:14 PM"))
-
+# Properly convert the DATE column to match true input
+# https://stackoverflow.com/questions/43230470/how-to-convert-excel-date-format-to-proper-date-in-r
 atm_data_raw <- atm_data_raw %>% mutate(DATE = as.Date(DATE, origin = "1899-12-30"))
 
 # Initial output to see data
 head(atm_data_raw)
 
+# Output summary for high level assessment
 summary(atm_data_raw)
 
+# Check dimensions to understand breadth of data
 dim(atm_data_raw)
 # 1474    3
 #Cash in hundreds
+```
 
-# Define as tsibble
+```{r warning=F, message=F}
+# Define as tsibble with DATE as index
 atm_data_ts <- atm_data_raw %>%
   as_tsibble(index = DATE, key = ATM)
 
+# Output tsibble to confirm proper format and definition
 atm_data_ts
 ```
 
 ```{r warning=F, message=F}
-library(seasonal)
+# Filter to ATM1 data
 atm1_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM1')
 
+# Output summary
 summary(atm1_data_ts)
 
-atm1_data_ts
+#atm1_data_ts
 
 atm1_data_ts %>%
   autoplot(Cash)
+```
 
+```{r warning=F, message=F}
 # Calculate median value for ATM1
 median <- median(atm1_data_ts$Cash, na.rm=TRUE)
 
@@ -101,21 +99,49 @@ atm1_dcmp <- atm1_data_ts %>%
 
 atm1_dcmp %>% components() %>% autoplot()
 
+components(atm1_dcmp) %>%
+  as_tsibble() %>%
+  filter_index("2009-05-01" ~ "2010-04-30") %>%
+  autoplot(Cash, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "Cash (in hundreds $USD)", title = "Seasonally Adjusted Trendline")
 
 components(atm1_dcmp) %>%
   as_tsibble() %>%
+  filter_index("2010-02-16" ~ "2010-04-30") %>%
   autoplot(Cash, colour = "gray") +
   geom_line(aes(y=season_adjust), colour = "#0072B2") +
-  labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
+  labs(y = "Cash (in hundreds $USD)", title = "Seasonally Adjusted Trendline")
 
 # from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
 
+Above plot shows that the seasonally adjusted data does not account for the weekly seasonal nature for the last three months. There is a shift.
+
 ```{r warning=F, message=F}
-# Create training set (365 total, perhaps assume 1 year of data)
-# 292 days, yes, using the generating dates based on the integer values
+atm1_data_ts %>% ACF() %>% autoplot()
+```
 
+```{r warning=F, message=F}
+atm1_data_ts %>% PACF() %>% autoplot()
+```
 
+```{r warning=F, message=F}
+atm1_data_ts %>% gg_season(Cash, period = "week") +
+  theme(legend.position = "none") +
+  labs(y="$USD (in hundreds)", title="ATM Withdrawals")
+
+atm1_data_ts %>%
+  gg_subseries(period = "week") +
+  labs(
+    y = "$USD (in hundreds)",
+    title = "ATM Withdrawals"
+  )
+```
+
+```{r warning=F, message=F}
+# Create training set (assume 1 year of data)
+# 292 days for training, approx. 80% of data
 train_atm1 <- atm1_data_ts %>% 
   filter_index("2009-05-01" ~ "2010-02-17")
 
@@ -126,42 +152,47 @@ fit_atm1 <- train_atm1 %>%
   model(
     Naive = NAIVE(Cash),
     `Seasonal naive` = SNAIVE(Cash),
-    `Random walk` = RW(Cash ~ drift())
+    `Random walk` = RW(Cash ~ drift()),
+    Arima = ARIMA(Cash),
+    ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")),
+    ETS_Mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
+    ETS_Damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
   )
 
-fit_atm1_snaive <- train_atm1 %>%
-  model(SNAIVE(Cash))
+fit_atm1_arima <- train_atm1 %>%
+  model(ARIMA(Cash))
 
 fit_atm1 %>% accuracy()
 
 # Check the residuals of Seasonal Naive
-fit_atm1_snaive %>% gg_tsresiduals()
+fit_atm1_arima %>% gg_tsresiduals()
 
-# Generate forecasts for 73 days
-fc_atm1 <- fit_atm1 %>% forecast(h = "71 days")
+# Generate forecasts for 72 days
+fc_atm1 <- fit_atm1 %>% forecast(h = "72 days")
 
 fc_atm1 %>% accuracy(atm1_data_ts)
 
 # Plot forecasts against actual values
 fc_atm1 %>%
-  autoplot(train_atm1, level = NULL) +
+  autoplot(filter_index(train_atm1, "2010-02-18" ~ "2010-04-30"), level = NULL) +
   autolayer(
     filter_index(atm1_data_ts, "2010-02-18" ~ "2010-04-30"),
     colour = "black"
   ) +
   labs(
-    y = "Cash (in hundreds)",
+    y = "Cash (in hundreds $USD)",
     title = "Forecasts for ATM1 Withdrawals"
   ) +
   guides(colour = guide_legend(title = "Forecast"))
-
-
-# Result: Not good, SNAIVE at least attempts the seasonal nature
 ```
 
+RMSE of ARIMA model on test data: 21.91975, next best is RMSE of Seasonal Naive 28.11888.
+
+The forecasts don't line up with the actual data well. The seasonal nature of the actual data doesn't match the seasonal nature of the forecasted data. Further investigation is needed.
 
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
+### REMOVE THIS SECTION, AS I'VE PUT ALL THE MODELS INTO ONE INITIAL ATTEMPT #####
 # ETS
 
 fit_atm1_ets <- train_atm1 %>%
@@ -172,7 +203,7 @@ fit_atm1_ets <- train_atm1 %>%
   )
 
 # Forecast for 73 days
-fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "71 days")
+fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "73 days")
 
 fc_atm1_ets %>%
   autoplot(filter_index(train_atm1, "2009-12-01" ~ "2010-04-30"), level = NULL) +
@@ -182,14 +213,134 @@ fc_atm1_ets %>%
   ) +
   labs(y="Billions $USD", title="GDP: China") +
   guides(colour = guide_legend(title = "Forecast"))
-# Forecast over the test set
-# Measure the accuracy
-# Forecast beyond the data
-# NAIVE
-# SNAIVE
-# drift()
-# ETS
-# ARIMA
+```
+
+
+
+
+```{r warning=F, message=F}
+# ATM1 train on 2010-02-16 to 2010-04-30 (end)
+# 15 + 31 + 30 = 76 days, 80% is 61 days
+new_seasonal_atm1 <- atm1_data_ts %>% 
+  filter_index("2010-02-16" ~ "2010-04-30")
+
+train_atm1 <- atm1_data_ts %>% 
+  filter_index("2010-02-16" ~ "2010-04-14")
+
+# Consider Box-Cox
+lambda <- new_seasonal_atm1 %>%
+  features(Cash, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+new_seasonal_atm1 %>%
+  autoplot(box_cox(Cash, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed ATM1 withdrawals with $\\lambda$ = ",
+         round(lambda,2))))
+```
+
+Applying Box-Cox, the SNaive RMSE went up to 10.08937, without Box-Cox 9.975
+
+```{r warning=F, message=F}
+# Fit the models
+fit_atm1 <- train_atm1 %>%
+  model(
+    `Seasonal naive` = SNAIVE(Cash),
+    Arima = ARIMA(Cash),
+    ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")),
+    ETS_Mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
+    ETS_Damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
+  )
+
+report(fit_atm1)
+
+fit_atm1 %>% accuracy()
+
+fit_atm1_arima<- train_atm1 %>%
+  model(ARIMA(Cash))
+
+# Check the residuals of Seasonal Naive
+fit_atm1_arima %>% gg_tsresiduals()
+
+# Generate forecasts for 16 days (two weeks), so we'll see if it picks up the seasonal nature
+fc_atm1 <- fit_atm1 %>% forecast(h = "16 days")
+
+fc_atm1 %>% accuracy(new_seasonal_atm1)
+
+# Plot forecasts against actual values
+fc_atm1 %>%
+  autoplot(filter_index(train_atm1, "2010-04-01" ~ "2010-04-30"), level = NULL) +
+  autolayer(
+    filter_index(new_seasonal_atm1, "2010-04-01" ~ "2010-04-30"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds $USD)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+```
+
+```{r warning=F, message=F, eval=F}
+# Forecast for May 2010
+fit_atm1 <- new_seasonal_atm1 %>%
+  model(ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")),
+        ARIMA(Cash))
+
+report(fit_atm1)
+
+fit_atm1 %>% accuracy()
+
+# Check the residuals of Seasonal Naive
+#fit_atm1 %>% gg_tsresiduals()
+
+# Generate forecasts for 31 days of May 2010
+fc_atm1 <- fit_atm1 %>% forecast(h = "31 days")
+
+# Plot forecasts against actual values
+fc_atm1 %>%
+  autoplot(filter_index(new_seasonal_atm1, "2010-04-01" ~ "2010-04-30"), level = NULL) +
+  autolayer(
+    filter_index(new_seasonal_atm1, "2010-04-01" ~ "2010-04-30"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds $USD)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+```
+
+
+
+```{r warning=F, message=F, eval=F}
+# ETS: for just the final 76 days also
+
+fit_atm1_ets <- train_atm1 %>%
+  model(
+    add = ETS(Cash ~ error("A") + trend("N") + season("A")),
+    mult = ETS(Cash ~ error("M") + trend("N") + season("M")),
+    damp = ETS(Cash ~ error("M") + trend("Ad") + season("M"))
+  )
+
+fit_atm1_ets %>% accuracy()
+
+# Forecast for 16 days
+fc_atm1_ets <- fit_atm1_ets %>% forecast(h = "16 days")
+
+fc_atm1_ets %>% accuracy(atm1_data_ts)
+
+fc_atm1_ets %>%
+  autoplot(filter_index(train_atm1, "2010-02-16" ~ "2010-04-30"), level = NULL) +
+  autolayer(
+    filter_index(atm1_data_ts, "2010-02-16" ~ "2010-04-30"),
+    colour = "black"
+  ) +
+  labs(y="$USD (in hundreds)", title="ATM1 Withdrawals Forecast") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+
 
 ```
 
@@ -205,7 +356,7 @@ median <- median(atm2_data_ts$Cash, na.rm=TRUE)
 # Set NAs to median
 atm2_data_ts$Cash[is.na(atm2_data_ts$Cash)] <- median
 
-summary(atm2_data_ts)
+atm2_data_ts
 
 atm2_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
@@ -213,7 +364,55 @@ atm2_data_ts %>%
   components() %>% autoplot()
 ```
 
+Same thing as ATM1, the seasonal nature of the data changes in the final few months. I'm gonna separate the forecast into just the final section where the weekly seasonal nature shifts.
+
 ```{r warning=F, message=F}
+atm2_data_ts %>% ACF() %>% autoplot()
+
+atm2_data_ts %>% PACF() %>% autoplot()
+
+atm2_data_ts %>% gg_season(Cash, period = "week") +
+  theme(legend.position = "none") +
+  labs(y="$ (in hundreds)", title="ATM Withdrawals")
+
+atm2_data_ts %>%
+  gg_subseries(period = "week") +
+  labs(
+    y = "$ (in hundreds)",
+    title = "ATM Withdrawals"
+  )
+```
+
+```{r warning=F, message=F}
+# From: https://stats.stackexchange.com/questions/494013/control-the-period-for-daily-time-series-in-tsibbles
+atm2_dcmp <- atm2_data_ts %>%
+  model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))) 
+
+atm2_dcmp %>% components() %>% autoplot()
+
+components(atm2_dcmp) %>%
+  as_tsibble() %>%
+  filter_index("2009-05-01" ~ "2010-04-30") %>%
+  autoplot(Cash, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
+
+components(atm2_dcmp) %>%
+  as_tsibble() %>%
+  filter_index("2010-02-16" ~ "2010-04-30") %>%
+  autoplot(Cash, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
+
+# from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
+```
+
+```{r warning=F, message=F}
+atm3_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM3')
+
+atm3_data_ts %>% autoplot(Cash)
+
 atm3_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM3', Cash > 0)
 
@@ -221,9 +420,47 @@ atm3_data_ts %>% autoplot(Cash)
 
 summary(atm3_data_ts)
 
-
+atm3_data_ts
 # Literally just 3 values above 0
 ```
+
+```{r warning=F, message=F}
+atm3_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM3')
+
+atm3_data_ts %>% autoplot(Cash)
+
+atm3_data_ts <- atm_data_ts %>%
+  filter(ATM == 'ATM3', Cash > 0)
+
+atm3_data_ts %>% autoplot(Cash)
+
+summary(atm3_data_ts)
+
+atm3_data_ts
+# Literally just 3 values above 0
+
+fit_atm3 <- atm3_data_ts %>% model(MEAN(Cash))
+
+```
+
+```{r warning=F, message=F}
+# Forecast for 31 days of May 2010
+fc_atm3 <- fit_atm3 %>% forecast(h = "31 days")
+
+#fc_atm1_ets %>% accuracy(atm3_data_ts)
+
+fc_atm3 %>%
+  autoplot(filter_index(atm3_data_ts, "2010-04-28" ~ "2010-05-31"), level = NULL) +
+  autolayer(
+    filter_index(atm1_data_ts, "2010-04-28" ~ "2010-05-31"),
+    colour = "black"
+  ) +
+  labs(y="$USD (in hundreds)", title="ATM1 Withdrawals Forecast") +
+  guides(colour = guide_legend(title = "Forecast"))
+```
+
+There's only 3 values with data above zero, so I'm assuming there was absolutely no activity but the ATM3 existed, or else it would have NA.
 
 ```{r warning=F, message=F}
 atm4_data_ts <- atm_data_ts %>%
@@ -237,7 +474,32 @@ atm4_data_ts %>%
   model(stl = STL(Cash ~ trend(window=Inf) + season(period=7, window="periodic"))
         ) %>% 
   components() %>% autoplot()
+
+atm4_data_ts
 ```
+
+```{r warning=F, message=F}
+median <- median(atm4_data_ts$Cash, na.rm=TRUE)
+
+# Set NAs to median
+atm4_data_ts$Cash[atm4_data_ts$Cash > 3000] <- median
+
+atm4_data_ts %>% ACF() %>% autoplot()
+
+atm4_data_ts %>% PACF() %>% autoplot()
+
+atm4_data_ts %>% gg_season(Cash, period = "week") +
+  theme(legend.position = "none") +
+  labs(y="$ (in hundreds)", title="ATM Withdrawals")
+
+atm4_data_ts %>%
+  gg_subseries(period = "week") +
+  labs(
+    y = "$ (in hundreds)",
+    title = "ATM Withdrawals"
+  )
+```
+
 
 
 Summary output
@@ -270,12 +532,57 @@ Dimensions output
 
 So remove the last 14 and all that remains is 1460. And 1460 / 4 is 365, so thus one year.
 
+Total by day and see if there is an overall relationship to be understood
+
+```{r warning=F, message=F}
+# Calculate median value for ATM
+# Straightforward approach to impute data
+median <- median(atm_data_ts$Cash, na.rm=TRUE)
+
+# Set NAs to median
+atm_data_ts$Cash[is.na(atm_data_ts$Cash)] <- median
+
+# Get rid of outlier from ATM4
+
+atm_data_ts$Cash[atm_data_ts$Cash > 5000] <- median 
+
+
+atm_data_ts %>% autoplot(Cash)
+
+atm_data_total_by_day <- atm_data_ts %>%
+  index_by(DATE) %>%
+  summarize(Cash_Total = sum(Cash))
+
+atm_data_total_by_day
+
+atm_data_total_by_day %>% autoplot(Cash_Total)
+
+atm_data_total_by_day %>%
+  model(stl = STL(Cash_Total ~ trend(window=Inf) + season(period=7, window="periodic"))
+        ) %>% 
+  components() %>% autoplot()
+
+
+# Seasonally adjusted plot
+atm_dcmp <- atm_data_total_by_day %>%
+  model(stl = STL(Cash_Total ~ trend(window=Inf) + season(period=7, window="periodic"))) 
+
+atm_dcmp %>% components() %>% autoplot()
+
+
+components(atm_dcmp) %>%
+  as_tsibble() %>%
+  autoplot(Cash_Total, colour = "gray") +
+  geom_line(aes(y=season_adjust), colour = "#0072B2") +
+  labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
+
+```
 
 # Part B – Forecasting Power
 
 - Dataset: ResidentialCustomerForecastLoad-624.xlsx
 
-Part B consists of a simple dataset of residential power usage for January 1998 until December 2013.  Your assignment is to model these data and a monthly forecast for 2014. The data is given in a single file. The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward. Add this to your existing files above. 
+Part B consists of a simple dataset of residential power usage for January 1998 until December 2013. Your assignment is to model these data and a monthly forecast for 2014. The data is given in a single file. The variable ‘KWH’ is power consumption in Kilowatt hours, the rest is straight forward. Add this to your existing files above. 
 
 ```{r warning=F, message=F}
 # Read in data
@@ -358,6 +665,8 @@ power_data_ts[151, 3] <- jul_kwh_med
 power_data_ts %>% autoplot(KWH)
 ```
 
+Perhaps a Box-Cox is needed here, there does seem to be trending upward
+
 ```{r warning=F, message=F}
 # STL
 power_data_ts %>%
@@ -381,6 +690,8 @@ components(power_dcmp) %>%
 # from textbook: If the seasonal component is removed from the original data, the resulting values are the “seasonally adjusted” data.
 ```
 
+Seasonally adjusted doesn't look too bad
+
 ```{r warning=F, message=F}
 # Seasonal differencing
 power_data_ts %>%
@@ -388,7 +699,7 @@ power_data_ts %>%
                plot_type='partial', lag=36) +
   labs(title="Seasonally differenced", y="")
 
-
+```
 # ARIMA model
 #power_data_ts %>% gg_tsdisplay()
 
@@ -403,26 +714,108 @@ forecast(arima_mod_power, h=36) %>%
   autoplot(power_data_ts) +
   labs(title = "KWH Used",
        y="KWH (in thousands)")
-```
+
 
 ```{r warning=F, message=F}
 # Forecasting
+# ATM1 train on 2010-02-16 to 2010-04-30 (end)
+# 15 + 31 + 30 = 76 days, 80% is 61 days
+# Create training set (365 total, perhaps assume 1 year of data)
+# 292 days, yes, using the generating dates based on the integer values
+
+
+# Train on 154 months, which is 12 years and 8 months (80% of the total)
+# Total is 192 months (16 years)
+
+train_power_data <- power_data_ts %>% 
+  filter_index("1998-Jan" ~ "2010-Oct")
+
+lambda <- power_data_ts %>%
+  features(KWH, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+train_power_data %>%
+  autoplot(box_cox(KWH, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed ATM1 withdrawals with $\\lambda$ = ",
+         round(lambda,2))))
+
+# Fit the models
+fit_power <- train_power_data %>%
+  model(
+    Naive = NAIVE(box_cox(KWH, lambda)),
+    `Seasonal naive` = SNAIVE(box_cox(KWH, lambda)),
+    `Random walk` = RW(box_cox(KWH, lambda)),
+    Arima_BC = ARIMA(box_cox(KWH, lambda)),
+    Arima = ARIMA(KWH)
+  )
+
+fit_power$Arima_BC
+
+fit_power$Arima
+
+#fit_atm1_snaive <- train_atm1 %>%
+#  model(SNAIVE(Cash))
+
+fit_power %>% accuracy()
+
+# Check the residuals of Seasonal Naive
+#fit_atm1_snaive %>% gg_tsresiduals()
+
+# Generate forecasts for 38 months, so we'll see if it picks up the seasonal nature
+fc_power <- fit_power %>% forecast(h = "38 months")
+
+fc_power %>% accuracy(power_data_ts)
+
+# Plot forecasts against actual values
+fc_power %>%
+  autoplot(power_data_ts, level = NULL) +
+  autolayer(
+    filter_index(power_data_ts, "1998-Jan" ~ "2010-Oct"),
+    colour = "black"
+  ) +
+  labs(
+    y = "KWH (in thousands)",
+    title = "Power Forecast"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+
+
+# Result: Not good, SNAIVE at least attempts the seasonal nature
 ```
+
+ARIMA_BC is the best RMSE
+Need to try the ETS
 
 # Part C – Waterflow (optional)
 
 - Dataset: Waterflow_Pipe1.xlsx and Waterflow_Pipe2.xlsx
 
-Part C consists of two data sets.  These are simple 2 columns sets, however they have different time stamps.  Your optional assignment is to time-base sequence the data and aggregate based on hour (example of what this looks like, follows).  Note for multiple recordings within an hour, take the mean.  Then to determine if the data is stationary and can it be forecast.  If so, provide a week forward forecast and present results via Rpubs and .rmd and the forecast in an Excel readable file. 
+Part C consists of two data sets. These are simple 2 columns sets, however they have different time stamps.  Your optional assignment is to time-base sequence the data and aggregate based on hour (example of what this looks like, follows).  Note for multiple recordings within an hour, take the mean.  Then to determine if the data is stationary and can it be forecast.  If so, provide a week forward forecast and present results via Rpubs and .rmd and the forecast in an Excel readable file. 
 
 ```{r warning=F, message=F}
 
 ```
 
 ```{r warning=F, message=F}
+
+
+
 # Read in data
-pipe1_data_raw <- read_excel("data/Waterflow_Pipe1.xlsx")
-pipe2_data_raw <- read_excel("data/Waterflow_Pipe2.xlsx")
+pipe1_data_raw <- read_excel("data/Waterflow_Pipe1.xlsx", col_types = c("date", "numeric"))
+pipe2_data_raw <- read_excel("data/Waterflow_Pipe2.xlsx", col_types = c("date", "numeric"))
+
+# From: https://stackoverflow.com/questions/53635818/convert-datetime-from-excel-to-r
+
+pipe1_data_raw$`Date Time` <- as.POSIXct(pipe1_data_raw$`Date Time`,
+                              origin="1899-12-30",
+                              tz="GMT")
+
+pipe2_data_raw$`Date Time` <- as.POSIXct(pipe2_data_raw$`Date Time`,
+                              origin="1899-12-30",
+                              tz="GMT")
+
 
 # Initial output to see data
 head(pipe1_data_raw)
@@ -433,8 +826,6 @@ summary(pipe2_data_raw)
 
 dim(pipe1_data_raw)
 dim(pipe2_data_raw)
-# 1474    3
-#Cash in hundreds
 ```
 # Define as tsibble
 atm_data_ts <- atm_data_raw %>%
