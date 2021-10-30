@@ -47,14 +47,6 @@ Dates of dataset start at 2009-05-01 and end with 2010-05-14. This indicates 379
 
 Dimensions of the initial dataset indicate 1474 observations, which again indicates more than a single year's worth of data. The 3 columns are `DATE`, `ATM`, and  `Cash`. The `DATE` indicates the specific data, the `ATM` indicates which of the 4 ATMs, and `Cash` represents the total amount withdrawn for the given date and ATM.
 
-
-Data observations:
-ATM2: 2 Cash NA values
-ATM4: Many Cash values with a decimal, but not all, something weird there, also ATM4 appears to have 1 really crazy outlier
-
-
-Total by day and see if there is an overall relationship to be understood
-
 ```{r warning=F, message=F}
 # Define as tsibble with DATE as index
 atm_data_ts <- atm_data_raw %>%
@@ -360,7 +352,6 @@ report(fit_atm1_bc)
 
 The AICc of the ARIMA model with Box-Cox transformation has improved from 447.73 to 417.98. A promising sign.
 
-
 ```{r warning=F, message=F}
 fit_atm1_bc %>% accuracy()
 ```
@@ -399,6 +390,9 @@ Given the assignment is to forecast the data for May 2010 from the provided data
 
 ## ATM2
 
+Data observations:
+ATM2: 2 Cash NA values
+
 ```{r warning=F, message=F}
 atm2_data_ts <- atm_data_ts %>%
   filter(ATM == 'ATM2')
@@ -413,7 +407,7 @@ median <- median(atm2_data_ts$Cash, na.rm=TRUE)
 # Set NAs to median
 atm2_data_ts$Cash[is.na(atm2_data_ts$Cash)] <- median
 
-#atm2_data_ts
+atm2_data_ts %>%  autoplot(Cash)
 ```
 
 ```{r warning=F, message=F}
@@ -447,6 +441,8 @@ atm2_data_ts %>%
     title = "ATM Withdrawals"
   )
 ```
+
+XXX
 
 ```{r warning=F, message=F}
 atm2_dcmp <- atm2_data_ts %>%
@@ -868,7 +864,9 @@ Box-Cox was not better, so go with model without transformation
 
 ## Overall daily totals across all four ATMs
 
-```{r warning=F, message=F, eval=F}
+Total by day and see if there is an overall relationship to be understood
+
+```{r warning=F, message=F}
 
 atm_data_all <- bind_rows(atm1_data_ts,
                           atm2_data_ts,
@@ -879,10 +877,12 @@ atm_data_total_by_day <- atm_data_all %>%
   index_by(DATE) %>%
   summarize(Cash_Total = sum(Cash))
 
-atm_data_total_by_day
+#atm_data_total_by_day
 
 atm_data_total_by_day %>% autoplot(Cash_Total)
+```
 
+```{r warning=F, message=F}
 # Seasonally adjusted plot
 atm_dcmp <- atm_data_total_by_day %>%
   model(stl = STL(Cash_Total ~ trend(window=Inf) + season(period=7, window="periodic"))) 
