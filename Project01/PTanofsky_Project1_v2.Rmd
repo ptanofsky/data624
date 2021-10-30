@@ -48,12 +48,8 @@ Dates of dataset start at 2009-05-01 and end with 2010-05-14. This indicates 379
 Dimensions of the initial dataset indicate 1474 observations, which again indicates more than a single year's worth of data. The 3 columns are `DATE`, `ATM`, and  `Cash`. The `DATE` indicates the specific data, the `ATM` indicates which of the 4 ATMs, and `Cash` represents the total amount withdrawn for the given date and ATM.
 
 
-Cash 19 NA's
-
 Data observations:
-ATM1: 3 Cash NA values
 ATM2: 2 Cash NA values
-ATM3: Only 3 Cash values with something above zero
 ATM4: Many Cash values with a decimal, but not all, something weird there, also ATM4 appears to have 1 really crazy outlier
 
 
@@ -78,7 +74,7 @@ atm_data_ts %>%
   labs(y = "Cash (in hundreds $USD)", title = "ATM Withdrawls")
 ```
 
-TODO: Comment here
+An initial plot of the time series shows the ATM4 data falls in a range greater than the other three ATMs. With the extreme outlier in ATM4, the plot does not provide much value for comparison across the four ATMS.
 
 ## ATM1
 
@@ -689,7 +685,7 @@ Still too irregular. Try ARIMA and ETS and see what sort of results I can get.
 
 ### Train and Test
 
-Given I'm struggling to find a viable weekly seasonal pattern through visual inspection, I will apply the different seasonal models through the train and test exercise.
+Given I'm struggling to find a viable weekly seasonal pattern through visual inspection, I will apply the different seasonal models through the train and test approach.
 
 ```{r warning=F, message=F}
 # Create training set (1 year of data)
@@ -715,7 +711,6 @@ report(fit_atm4)
 ```{r warning=F, message=F}
 fit_atm4 %>% accuracy()
 ```
-
 
 
 
@@ -765,9 +760,13 @@ fit_atm4 <- train_atm4 %>%
 report(fit_atm4)
 ```
 
+
+
 ```{r warning=F, message=F}
 fit_atm4 %>% accuracy()
 ```
+
+
 
 ```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks), so we'll see if it picks up the seasonal nature
@@ -775,6 +774,8 @@ fc_atm4 <- fit_atm4 %>% forecast(h = "16 days")
 
 fc_atm4 %>% accuracy(new_seasonal_atm4)
 ```
+
+
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -790,6 +791,8 @@ fc_atm4 %>%
   ) +
   guides(colour = guide_legend(title = "Forecast"))
 ```
+
+
 
 ```{r warning=F, message=F}
 fit_atm4_ets <- train_atm4 %>%
@@ -866,7 +869,13 @@ Box-Cox was not better, so go with model without transformation
 ## Overall daily totals across all four ATMs
 
 ```{r warning=F, message=F, eval=F}
-atm_data_total_by_day <- atm_data_ts %>%
+
+atm_data_all <- bind_rows(atm1_data_ts,
+                          atm2_data_ts,
+                          atm3_data_ts_all,
+                          atm4_data_ts)
+
+atm_data_total_by_day <- atm_data_all %>%
   index_by(DATE) %>%
   summarize(Cash_Total = sum(Cash))
 
@@ -874,18 +883,11 @@ atm_data_total_by_day
 
 atm_data_total_by_day %>% autoplot(Cash_Total)
 
-atm_data_total_by_day %>%
-  model(stl = STL(Cash_Total ~ trend(window=Inf) + season(period=7, window="periodic"))
-        ) %>% 
-  components() %>% autoplot()
-
-
 # Seasonally adjusted plot
 atm_dcmp <- atm_data_total_by_day %>%
   model(stl = STL(Cash_Total ~ trend(window=Inf) + season(period=7, window="periodic"))) 
 
 atm_dcmp %>% components() %>% autoplot()
-
 
 components(atm_dcmp) %>%
   as_tsibble() %>%
@@ -915,17 +917,22 @@ names(power_data_raw)[names(power_data_raw) == 'YYYY-MMM'] <- 'Month'
 summary(power_data_raw)
 ```
 
+The summary of the residential power data indicates 192 months, which is exactly 16 years. The KWH column shows 1 missing value with a range of 770523 to 10655730. The minimum value being so distanct from the first quartile value may indicate an outlier. The CaseSequence column appears to be a integer unique identifer for each month, so will ignore moving forward.
+
 ```{r warning=F, message=F}
 # Display dimensions for assessment
 # should be 16 years of data 1998-2013
 # Yep, 192/12 = 16
 dim(power_data_raw)
-# 192   3
-# KWH
+```
 
+The dimensions output confirms the summary output, 192 observations with three columns.
+
+```{r warning=F, message=F}
 power_data_ts <- power_data_raw %>%
   mutate(Month = yearmonth(Month)) %>%
   mutate(KWH = KWH/1e3) %>% # In thousands
+  select(-c(CaseSequence)) %>%
   as_tsibble(index = Month)
 
 # Output first 5 rows of tsibble
@@ -936,11 +943,19 @@ power_data_ts %>%
   autoplot(KWH)
 ```
 
+After converting the raw data to a tsibble with the `Month` as the index, we do see a missing value perhaps sometime in 2008 and an outlier in early 2010.
+
 ```{r warning=F, message=F}
-# DO I NEED OR WANT THIS PLOT?
-power_data_ts %>%
-  filter_index("2010" ~ "2011")
+power_data_ts$Month[is.na(power_data_ts$KWH)]
 ```
+
+Month with missing value is "2008 Sep".
+
+```{r warning=F, message=F}
+power_data_ts$Month[power_data_ts$KWH < 3000]
+```
+
+Month with outlier is "2010 Jul".
 
 First observations, data is Monthly, so I'd expect a seasonal component.
 1 month is missing KWH has 1 NA value (2008 Sep) Considering imputing with median Sep Value
@@ -948,9 +963,11 @@ Outlier (with very small value in July 2010) Considering imputing with median Ju
 
 ### Impute data
 
-```{r warning=F, message=F}
-#power_data_ts
+Given the data is monthly and appears to follow a clear seasonal pattern, I will impute the missing value and the outlier value by calculating the median value for each month for imputation.
 
+First, I will find the median value for all September entries.
+
+```{r warning=F, message=F}
 # I want all the September values
 sep_data <- power_data_ts %>%
   filter(str_detect(Month, "Sep"))
@@ -962,12 +979,11 @@ sep_kwh_med <- sep_data %>%
 
 sep_kwh_med
 # Median 7666.97
-#power_data_ts[power_data_ts$Month == "2008 Sep"] <- sep_kwh_med
 
-power_data_ts[129, 3] <- sep_kwh_med
-
-power_data_ts
+power_data_ts[129, 2] <- sep_kwh_med
 ```
+
+Median value for all other September values is 7666.97.
 
 ```{r warning=F, message=F}
 # I want all the July values
@@ -982,19 +998,28 @@ jul_kwh_med <- jul_data %>%
 jul_kwh_med
 # Median 7678.623	
 
-power_data_ts[151, 3] <- jul_kwh_med
+power_data_ts[151, 2] <- jul_kwh_med
+```
 
+Median value for all other July values is 7695.942.
+
+```{r warning=F, message=F}
 power_data_ts %>% autoplot(KWH)
 ```
 
-Perhaps a Box-Cox is needed here, there does seem to be increasing variance
+Above plot shows the residential customer power data with imputations. Clearly a seasonal pattern exists along with an increasing variance near the end of the plot. Perhaps a Box-Cox transformation could be useful. Also, an slight increasing trend does appear, at least for the second half of the plot.
 
+### Decomposition
 
 ```{r warning=F, message=F}
 power_dcmp <- power_data_ts %>%
   model(stl = STL(KWH ~ trend(window=Inf) + season(period=12, window="periodic"))) 
 power_dcmp %>% components() %>% autoplot()
+```
 
+The decomposition of the data indicates an increasing trend along with a seasonal pattern and remainder component that appear equal in weight.
+
+```{r warning=F, message=F}
 components(power_dcmp) %>%
   as_tsibble() %>%
   autoplot(KWH, colour = "gray") +
@@ -1002,8 +1027,36 @@ components(power_dcmp) %>%
   labs(y = "KWH (in thousands)", title = "Seasonally Adjusted Trendline")
 ```
 
-Seasonally adjusted doesn't look too bad
+The plot of the seasonally adjusted data indicates the seasonal pattern does persist through the full dataset with a few exceptions throughout.
 
+```{r warning=F, message=F}
+power_data_ts %>% ACF() %>% autoplot()
+```
+
+ACF plot shows the highest correlation at lag 12, which is expected for monthly data over the course of several years.
+
+```{r warning=F, message=F}
+power_data_ts %>% PACF() %>% autoplot()
+```
+
+PACF plot indicates autocorrelation at lags 1, 2, 5, 11, and 12, interesting result for monthly data in which I expected the PACF plot to show the higest correlation at lag 12.
+
+```{r warning=F, message=F}
+power_data_ts %>% gg_season(KWH, period = "year") +
+  labs(y="KWH (in thousands)", title="Residential Customer Power Usage")
+```
+
+The `gg_season` plot certainly shows a yearly pattern with low usage in the spring and fall and higher usage in the summer and winter.
+
+```{r warning=F, message=F}
+power_data_ts %>%
+  gg_subseries(period = "year") +
+  labs(y="KWH (in thousands)", title="Residential Customer Power Usage")
+```
+
+TODO: The `gg_subseries` plot indicates:
+
+TODO: Too soon with this
 ```{r warning=F, message=F}
 # Seasonal differencing
 power_data_ts %>%
@@ -1011,23 +1064,6 @@ power_data_ts %>%
                plot_type='partial', lag=36) +
   labs(title="Seasonally differenced", y="")
 
-```
-
-```{r warning=F, message=F}
-# ARIMA model
-#power_data_ts %>% gg_tsdisplay()
-
-# https://otexts.com/fpp3/seasonal-arima.html
-arima_mod_power <- power_data_ts %>% model(ARIMA(KWH, stepwise=F, approx=F))
-
-report(arima_mod_power)
-
-arima_mod_power %>% gg_tsresiduals(lag=36)
-
-forecast(arima_mod_power, h=36) %>%
-  autoplot(power_data_ts) +
-  labs(title = "KWH Used",
-       y="KWH (in thousands)")
 ```
 
 ### Train and Test Model
@@ -1040,7 +1076,7 @@ train_power_data <- power_data_ts %>%
   filter_index("1998-Jan" ~ "2010-Oct")
 ```
 
-Box-Cox
+Calculate lambda for the Box-Cox transformation
 
 ```{r warning=F, message=F}
 lambda <- power_data_ts %>%
@@ -1053,47 +1089,45 @@ train_power_data %>%
        title = latex2exp::TeX(paste0(
          "Transformed ATM1 withdrawals with $\\lambda$ = ",
          round(lambda,2))))
+```
 
+```{r warning=F, message=F}
 # Fit the models
-fit_power <- train_power_data %>%
+fit_power_bc <- train_power_data %>%
   model(
     Naive = NAIVE(box_cox(KWH, lambda)),
     `Seasonal naive` = SNAIVE(box_cox(KWH, lambda)),
     `Random walk` = RW(box_cox(KWH, lambda)),
-    Arima_BC = ARIMA(box_cox(KWH, lambda)),
-    Arima = ARIMA(KWH)
+    Arima = ARIMA(box_cox(KWH, lambda)),
+    ETS_Add = ETS(box_cox(KWH, lambda) ~ error("A") + trend("A") + season("A")),
+    ETS_Mult = ETS(box_cox(KWH, lambda) ~ error("M") + trend("A") + season("M")),
+    ETS_Damp = ETS(box_cox(KWH, lambda) ~ error("M") + trend("Ad") + season("M"))
   )
 
-fit_power$Arima_BC
+report(fit_power_bc)
 ```
 
 ```{r warning=F, message=F}
-fit_power$Arima
+fit_power_bc %>% accuracy()
 ```
 
-```{r warning=F, message=F}
-#fit_atm1_snaive <- train_atm1 %>%
-#  model(SNAIVE(Cash))
-
-fit_power %>% accuracy()
-```
+The best RMSE on the training data was attained by the ARIMA model followed by the three ETS models.
 
 ```{r warning=F, message=F}
-# Check the residuals of Seasonal Naive
-#fit_atm1_snaive %>% gg_tsresiduals()
-
 # Generate forecasts for 38 months, so we'll see if it picks up the seasonal nature
-fc_power <- fit_power %>% forecast(h = "38 months")
+fc_power_bc <- fit_power_bc %>% forecast(h = "38 months")
 
-fc_power %>% accuracy(power_data_ts)
+fc_power_bc %>% accuracy(power_data_ts)
 ```
+
+The best RMSE is the Seasonal Naive model followed closely by the Arima model and the ETS model with Multiplicative.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
-fc_power %>%
-  autoplot(power_data_ts, level = NULL) +
+fc_power_bc %>%
+  autoplot(filter_index(power_data_ts, "2010-Nov" ~ "2013-Dec"), level = NULL) +
   autolayer(
-    filter_index(power_data_ts, "1998-Jan" ~ "2010-Oct"),
+    filter_index(power_data_ts, "2010-Nov" ~ "2013-Dec"),
     colour = "black"
   ) +
   labs(
@@ -1101,14 +1135,30 @@ fc_power %>%
     title = "Power Forecast"
   ) +
   guides(colour = guide_legend(title = "Forecast"))
-
-
-# Result: Not good, SNAIVE at least attempts the seasonal nature
 ```
 
-ARIMA_BC is the best RMSE
-Need to try the ETS
+### Forecast
 
+Let's forecast for the year 2014 with the three best performing models.
+
+```{r warning=F, message=F}
+# Generate forecasts for 50 months, which covers the end of the provided time series and the next 12 months of 2014
+fc_power_bc14 <- fit_power_bc %>% forecast(h = "50 months")
+
+fc_power_bc14 %>%
+  autoplot(filter_index(power_data_ts, "2010-Nov" ~ "2014-Dec"), level = NULL) +
+  autolayer(
+    filter_index(power_data_ts, "2010-Nov" ~ "2014-Dec"),
+    colour = "black"
+  ) +
+  labs(
+    y = "KWH (in thousands)",
+    title = "Power Forecast"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+```
+
+Go with the ARIMA model.
 
 # Part C – Waterflow (optional)
 
@@ -1121,9 +1171,7 @@ Part C consists of two data sets. These are simple 2 columns sets, however they 
 ```
 
 ```{r warning=F, message=F}
-
-
-
+library(lubridate)
 # Read in data
 pipe1_data_raw <- read_excel("data/Waterflow_Pipe1.xlsx", col_types = c("date", "numeric"))
 pipe2_data_raw <- read_excel("data/Waterflow_Pipe2.xlsx", col_types = c("date", "numeric"))
@@ -1149,11 +1197,40 @@ summary(pipe2_data_raw)
 dim(pipe1_data_raw)
 dim(pipe2_data_raw)
 ```
-# Define as tsibble
-atm_data_ts <- atm_data_raw %>%
-  as_tsibble(index = DATE, key = ATM)
 
-atm_data_ts
+```{r warning=F, message=F}
+# Calculate the average flow per hour for pipe1
+pipe1_data_raw$Date <- as.Date(pipe1_data_raw$`Date Time`)
+pipe1_data_raw$Time <- hour(pipe1_data_raw$`Date Time`) + 1
+
+pipe1_data_raw <- pipe1_data_raw %>%
+  group_by(Date, Time) %>%
+  summarise(WF_AVG = mean(WaterFlow)) %>% ungroup()
+
+pipe1_data_raw$`Date Time` <- with(pipe1_data_raw, ymd_h(paste(Date, Time)))
+
+pipe1_data_raw <- pipe1_data_raw %>% 
+  select(c(`Date Time`, WF_AVG)) %>%
+  rename(WaterFlow = WF_AVG)
+
+summary(pipe1_data_raw)
+```
+
+
+```{r warning=F, message=F}
+# Define as tsibble
+pipe1_data_ts <- pipe1_data_raw %>%
+  as_tsibble(index = `Date Time`)
+
+pipe1_data_ts %>% autoplot()
+
+pipe2_data_ts <- pipe2_data_raw %>%
+  as_tsibble(index = `Date Time`)
+
+pipe2_data_ts %>% 
+  filter_index("2015-10-23" ~ "2015-11-01") %>%
+  autoplot() +
+  autolayer(pipe1_data_ts)
 ```
 
 
