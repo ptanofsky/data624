@@ -13,6 +13,7 @@ This project consists of 3 parts - two required and one bonus and is worth 15% o
 library(fpp3)
 library(tidyverse)
 library(readxl)
+library(writexl)
 library(seasonal)
 library(stringr)
 ```
@@ -85,7 +86,7 @@ The summary of data for ATM1 confirms the 365 days (single year) of observations
 atm1_data_ts$DATE[is.na(atm1_data_ts$Cash)]
 ```
 
-The 3 dats with missing Cash values are displayed above. Not sure the significance of the missing data occurring in a small window of time, so will consider imputation.
+The 3 dates with missing Cash values are displayed above. Not sure the significance of the missing data occurring in a small window of time, so will consider imputation.
 
 ```{r warning=F, message=F}
 atm1_data_ts %>%
@@ -246,7 +247,7 @@ Plotting the seven forecasts along with the original dataset shows the seasonal 
 fit_atm1_arima <- train_atm1 %>%
   model(ARIMA(Cash))
 
-# Check the residuals of Seasonal Naive
+# Check the residuals of Arima model
 fit_atm1_arima %>% gg_tsresiduals()
 ```
 
@@ -310,7 +311,7 @@ fc_atm1 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-The plot of the test forecasts confirms the models are correctly capturing the seasonal nature of the data near the end of the dataset.
+The plot of the test forecasts confirms the models are correctly capturing the seasonal nature of the data near the end of the dataset. Unfortunately, the ARIMA model is forecasting negative values, which of course is not possible.
 
 ```{r warning=F, message=F}
 fit_atm1_arima<- train_atm1 %>%
@@ -347,14 +348,14 @@ Applying Box-Cox to see if I can squeeze out a little better performance on the 
 fit_atm1_bc <- train_atm1 %>%
   model(
     `Seasonal naive` = SNAIVE(box_cox(Cash, lambda)),
-    ARIMA(box_cox(Cash, lambda)),
+    Arima = ARIMA(box_cox(Cash, lambda)),
     ETS_Add = ETS(box_cox(Cash, lambda) ~ error("A") + trend("N") + season("A"))
   )
 
 report(fit_atm1_bc)
 ```
 
-The AICc of the ARIMA model with Box-Cox transformation has improved from 447.73 to 417.98. A promising sign.
+The AICc of the ARIMA model with Box-Cox transformation has improved from 447.73 to 417.47. A promising sign.
 
 ```{r warning=F, message=F}
 fit_atm1_bc %>% accuracy()
@@ -392,9 +393,42 @@ The above plot shows the forecasts of the models with transformation along with 
 
 Given the assignment is to forecast the data for May 2010 from the provided data, I believe the models generated from the final two and a half months is the appropriate approach. Clearly, a shift in the weekly pattern occurs in February 2010 and without any additional context or history, I assume that shift will continue through May 2010. As the forecast is only 1 month or approximately four more weeks from the end of the provided data, then I choose to believe that new pattern will persist for the next four weeks through May 2010.
 
+
 ```{r warning=F, message=F}
-# Generate forecast data
+# Generate forecasts for 16 days (two weeks) plus the 31 days of May
+fc_atm1_final <- fit_atm1_bc %>% forecast(h = "47 days")
+
+# Plot forecasts against actual values
+fc_atm1_final %>%
+  autoplot(filter_index(train_atm1, "2010-02-16" ~ "2010-05-31"), level = NULL) +
+  autolayer(
+    filter_index(new_seasonal_atm1, "2010-02-16" ~ "2010-05-31"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds $USD)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+
+fc_atm1_final %>%
+  filter(.model == "Arima")
 ```
+
+```{r warning=F, message=F}
+# dataframe for Excel output
+atm1_forecast_may2010 <- fc_atm1_final %>%
+  filter(.model == "Arima", DATE > "2010-04-30")
+
+atm1_forecast_may2010 <- data.frame(atm1_forecast_may2010) %>%
+  select(c(DATE, ATM, .mean))%>%
+  rename(Cash = .mean)
+
+atm1_forecast_may2010
+```
+
+
+
 
 ## ATM2
 
@@ -575,10 +609,39 @@ Similar to ATM1, I've displayed the residuals of the ETS Multiplicative model to
 
 ### ATM2 Conclusion
 
-TODO
+Going with ETS-Add
 
 ```{r warning=F, message=F}
-# Forecast the data
+# Generate forecasts for 16 days (two weeks) plus the 31 days of May
+fc_atm2_final <- fit_atm2 %>% forecast(h = "47 days")
+
+# Plot forecasts against actual values
+fc_atm2_final %>%
+  autoplot(filter_index(train_atm2, "2010-02-16" ~ "2010-05-31"), level = NULL) +
+  autolayer(
+    filter_index(new_seasonal_atm2, "2010-02-16" ~ "2010-05-31"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds $USD)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+
+fc_atm2_final %>%
+  filter(.model == "ETS_Add")
+```
+
+```{r warning=F, message=F}
+# dataframe for Excel output
+atm2_forecast_may2010 <- fc_atm2_final %>%
+  filter(.model == "ETS_Add", DATE > "2010-04-30")
+
+atm2_forecast_may2010 <- data.frame(atm2_forecast_may2010) %>%
+  select(c(DATE, ATM, .mean))%>%
+  rename(Cash = .mean)
+
+atm2_forecast_may2010
 ```
 
 ## ATM3
@@ -660,7 +723,14 @@ Not a very interesting plot of the forecasted data in relation to the ATM3 datas
 There's only 3 values with data above zero, so I'm assuming there was absolutely no activity but the ATM3 existed, or else it would have NA.
 
 ```{r warning=F, message=F}
-# Forecast for 31 days of May 2010
+# dataframe for Excel output
+atm3_forecast_may2010 <- fc_atm3
+
+atm3_forecast_may2010 <- data.frame(atm3_forecast_may2010) %>%
+  select(c(DATE, ATM, .mean))%>%
+  rename(Cash = .mean)
+
+atm3_forecast_may2010
 ```
 
 ## ATM4
@@ -989,7 +1059,36 @@ Box-Cox was not better, so go with model without transformation
 ### ATM4 Conclusion
 
 ```{r warning=F, message=F}
-# Forecast
+# Generate forecasts for 16 days (two weeks) plus the 31 days of May
+fc_atm4_final <- fit_atm4 %>% forecast(h = "47 days")
+
+# Plot forecasts against actual values
+fc_atm4_final %>%
+  autoplot(filter_index(train_atm4, "2010-02-16" ~ "2010-05-31"), level = NULL) +
+  autolayer(
+    filter_index(new_seasonal_atm4, "2010-02-16" ~ "2010-05-31"),
+    colour = "black"
+  ) +
+  labs(
+    y = "Cash (in hundreds $USD)",
+    title = "Forecasts for ATM1 Withdrawals"
+  ) +
+  guides(colour = guide_legend(title = "Forecast"))
+
+fc_atm4_final %>%
+  filter(.model == "ETS_Add")
+```
+
+```{r warning=F, message=F}
+# dataframe for Excel output
+atm4_forecast_may2010 <- fc_atm4_final %>%
+  filter(.model == "ETS_Mult", DATE > "2010-04-30")
+
+atm4_forecast_may2010 <- data.frame(atm4_forecast_may2010) %>%
+  select(c(DATE, ATM, .mean))%>%
+  rename(Cash = .mean)
+
+atm4_forecast_may2010
 ```
 
 ## Overall daily totals across all four ATMs
@@ -1027,6 +1126,16 @@ components(atm_dcmp) %>%
 
 ```
 
+```{r warning=F, message=F}
+# Write to Excel file
+atm_forecast_may2010 <- bind_rows(atm1_forecast_may2010,
+                                  atm2_forecast_may2010,
+                                  atm3_forecast_may2010,
+                                  atm4_forecast_may2010
+                                  )
+write_xlsx(atm_forecast_may2010, "data/ptanofsky_atm_forecast_may2010.xlsx")
+```
+
 # Part B – Residential Customer Power
 
 - Dataset: ResidentialCustomerForecastLoad-624.xlsx
@@ -1047,7 +1156,7 @@ names(power_data_raw)[names(power_data_raw) == 'YYYY-MMM'] <- 'Month'
 summary(power_data_raw)
 ```
 
-The summary of the residential power data indicates 192 months, which is exactly 16 years. The KWH column shows 1 missing value with a range of 770523 to 10655730. The minimum value being so distanct from the first quartile value may indicate an outlier. The CaseSequence column appears to be a integer unique identifer for each month, so will ignore moving forward.
+The summary of the residential power data indicates 192 months, which is exactly 16 years. The KWH column shows 1 missing value with a range of 770523 to 10655730. The minimum value being so distinct from the first quartile value may indicate an outlier. The CaseSequence column appears to be a integer unique identifier for each month, so will ignore moving forward.
 
 ```{r warning=F, message=F}
 # Display dimensions for assessment
@@ -1068,7 +1177,7 @@ power_data_ts <- power_data_raw %>%
 # Output first 5 rows of tsibble
 #head(power_data_ts)
 
-# Inital plot of data
+# Initial plot of data
 power_data_ts %>%
   autoplot(KWH)
 ```
@@ -1169,7 +1278,7 @@ ACF plot shows the highest correlation at lag 12, which is expected for monthly 
 power_data_ts %>% PACF() %>% autoplot()
 ```
 
-PACF plot indicates autocorrelation at lags 1, 2, 5, 11, and 12, interesting result for monthly data in which I expected the PACF plot to show the higest correlation at lag 12.
+PACF plot indicates autocorrelation at lags 1, 2, 5, 11, and 12, interesting result for monthly data in which I expected the PACF plot to show the highest correlation at lag 12.
 
 ```{r warning=F, message=F}
 power_data_ts %>% gg_season(KWH, period = "year") +
@@ -1254,7 +1363,7 @@ fc_power_bc <- fit_power_bc %>% forecast(h = "38 months")
 fc_power_bc %>% accuracy(power_data_ts)
 ```
 
-The best RMSE is the Seasonal Naive model followed closely by the Arima model and the ETS model with Multiplicative.
+The best RMSE is the Seasonal Naive model followed closely by the ARIMA model and the ETS model with Multiplicative.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -1293,6 +1402,10 @@ fc_power_bc14 %>%
 ```
 
 Go with the ARIMA model.
+
+```{r warning=F, message=F}
+# Write to excel
+```
 
 # Part C – Waterflow (optional)
 
