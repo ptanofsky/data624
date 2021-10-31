@@ -757,6 +757,7 @@ The plot of the ATM4 data shows a clear outlier in February 2010.
 atm4_data_ts %>%
   filter(Cash > 3000)
 ```
+
 The day of the outlier turns out to be 2010-02-09.
 
 ## Decomposition
@@ -891,14 +892,13 @@ fit_atm4 <- train_atm4 %>%
 
 report(fit_atm4)
 ```
-
-xxx
+The ARIMA model generates the best AICc value at 4271.254 compared to the ETS models.
 
 ```{r warning=F, message=F}
 fit_atm4 %>% accuracy()
 ```
 
-xxx
+According to the RMSE, the ETS Additive model produces the most accurate model against the training data at 318.9662.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 72 days
@@ -907,7 +907,7 @@ fc_atm4 <- fit_atm4 %>% forecast(h = "72 days")
 fc_atm4 %>% accuracy(atm4_data_ts)
 ```
 
-xxx
+Now forecasting the models on the test dataset, the ARIMA model performs the best with an RMSE of 318.8746. 
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -924,7 +924,7 @@ fc_atm4 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-The above plot indicates the models are not following the weekly seasonal pattern. Let me try the truncated version similar to ATM1 and ATM2.
+The above plot indicates the models are not following the weekly seasonal pattern. Let me try the truncated training and test approach similar to ATM1 and ATM2.
 
 ```{r warning=F, message=F}
 # ATM4 train on 2010-02-16 to 2010-04-30 (end)
@@ -948,13 +948,13 @@ fit_atm4 <- train_atm4 %>%
 report(fit_atm4)
 ```
 
-xxx
+The ARIMA attains the best AICc value of 841.4916 compared to the ETS models.
 
 ```{r warning=F, message=F}
 fit_atm4 %>% accuracy()
 ```
 
-xxx
+The ETS Additive model produces the best RMSE of 289.9164 against the training data.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks), so we'll see if it picks up the seasonal nature
@@ -963,7 +963,7 @@ fc_atm4 <- fit_atm4 %>% forecast(h = "16 days")
 fc_atm4 %>% accuracy(new_seasonal_atm4)
 ```
 
-xxx
+Forecasting the models for the final 16 days of the dataset, the ETS Multiplicative model achieves the best RMSE at 241.8786.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -980,7 +980,7 @@ fc_atm4 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-xxx
+The plot of the forecasts for the five seasonal models shows the ETS Additive and ETS Multiplicative models as following the weekly pattern best. The ARIMA model results in a constant, horizontal line while the ETS with dampening immediately starts producing negative values, which is not helpful. Given the small sample size above, the Seasonal Naive model does product a model following the weekly seasonal pattern.
 
 ```{r warning=F, message=F}
 fit_atm4_ets <- train_atm4 %>%
@@ -990,9 +990,11 @@ fit_atm4_ets <- train_atm4 %>%
 fit_atm4_ets %>% gg_tsresiduals()
 ```
 
-ETS Multiplicative appears to perform best
+Given the results of the test data forecasts, the ETS Multiplicative model is chosen. The residuals for the model appear close to white noise while the residuals do not show correlation, a good sign for the model.
 
 ### Transformation
+
+In an attempt to improve the model, the Box-Cox transformation is applied along with the seasonal model functions.
 
 ```{r warning=F, message=F}
 # Consider Box-Cox
@@ -1008,13 +1010,13 @@ new_seasonal_atm4 %>%
          round(lambda,2))))
 ```
 
-xxx
+The Box-Cox transformation of the final few months of the dataset helps clarify the weekly seasonal pattern.
 
 ```{r warning=F, message=F}
 fit_atm4_bc <- train_atm4 %>%
   model(
     `Seasonal naive` = SNAIVE(box_cox(Cash, lambda)),
-    ARIMA(box_cox(Cash, lambda)),
+    Arima = ARIMA(box_cox(Cash, lambda)),
     ETS_Add = ETS(box_cox(Cash, lambda) ~ error("A") + trend("N") + season("A")),
     ETS_Mult = ETS(box_cox(Cash, lambda) ~ error("M") + trend("N") + season("M")),
   )
@@ -1022,13 +1024,13 @@ fit_atm4_bc <- train_atm4 %>%
 report(fit_atm4_bc)
 ```
 
-xxx
+The ARIMA model with transformation performs the best on the training data with an AICc of 360.7386.
 
 ```{r warning=F, message=F}
 fit_atm4_bc %>% accuracy()
 ```
 
-xxx
+The best accuracy on the training set goes to the ARIMA model with an RMSE of 293.0240.
 
 ```{r warning=F, message=F}
 # Generate forecasts for the next 16 days
@@ -1037,7 +1039,7 @@ fc_atm4_bc <- fit_atm4_bc %>% forecast(h = "16 days")
 fc_atm4_bc %>% accuracy(new_seasonal_atm4)
 ```
 
-xxx
+The forecast of the models for the final 16 days of the dataset shows the ARIMA model with the best-performing RMSE of 320.7253.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -1054,9 +1056,11 @@ fc_atm4_bc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-Box-Cox was not better, so go with model without transformation
+The above plot of the seasonal models with Box-Cox transformation clearly show the forecasts do not outperform the forecasts of the models without the transformation.
 
 ### ATM4 Conclusion
+
+Overall, the ETS Multiplicative model without transformation performs the best on the final few months of the ATM4 dataset.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks) plus the 31 days of May
@@ -1076,7 +1080,7 @@ fc_atm4_final %>%
   guides(colour = guide_legend(title = "Forecast"))
 
 fc_atm4_final %>%
-  filter(.model == "ETS_Add")
+  filter(.model == "ETS_Mult")
 ```
 
 ```{r warning=F, message=F}
@@ -1125,6 +1129,8 @@ components(atm_dcmp) %>%
   labs(y = "Cash (in hundreds)", title = "Seasonally Adjusted Trendline")
 
 ```
+
+Combine the forecasts for the four ATM datasets and write to an Excel file.
 
 ```{r warning=F, message=F}
 # Write to Excel file
@@ -1196,10 +1202,6 @@ power_data_ts$Month[power_data_ts$KWH < 3000]
 
 Month with outlier is "2010 Jul".
 
-First observations, data is Monthly, so I'd expect a seasonal component.
-1 month is missing KWH has 1 NA value (2008 Sep) Considering imputing with median Sep Value
-Outlier (with very small value in July 2010) Considering imputing with median Jul Value
-
 ### Impute data
 
 Given the data is monthly and appears to follow a clear seasonal pattern, I will impute the missing value and the outlier value by calculating the median value for each month for imputation.
@@ -1256,7 +1258,7 @@ power_dcmp <- power_data_ts %>%
 power_dcmp %>% components() %>% autoplot()
 ```
 
-The decomposition of the data indicates an increasing trend along with a seasonal pattern and remainder component that appear equal in weight.
+The decomposition of the data indicates an increasing trend along with a seasonal pattern and remainder component that appear near equal in weight.
 
 ```{r warning=F, message=F}
 components(power_dcmp) %>%
@@ -1293,7 +1295,7 @@ power_data_ts %>%
   labs(y="KWH (in thousands)", title="Residential Customer Power Usage")
 ```
 
-TODO: The `gg_subseries` plot indicates:
+The `gg_subseries` plot indicates increasing usage for almost every month over the course of the dataset. This increase is another indicator the Box-Cox transformation will be needed.
 
 TODO: Too soon with this
 ```{r warning=F, message=F}
@@ -1330,7 +1332,7 @@ train_power_data %>%
          round(lambda,2))))
 ```
 
-xxx
+The Box-Cox transformation does appear to address the increasing variance in the initial plot.
 
 ```{r warning=F, message=F}
 # Fit the models
@@ -1348,7 +1350,7 @@ fit_power_bc <- train_power_data %>%
 report(fit_power_bc)
 ```
 
-xxx
+The best performing model according to the AICc is the ARIMA model at -785.4651.
 
 ```{r warning=F, message=F}
 fit_power_bc %>% accuracy()
@@ -1363,7 +1365,7 @@ fc_power_bc <- fit_power_bc %>% forecast(h = "38 months")
 fc_power_bc %>% accuracy(power_data_ts)
 ```
 
-The best RMSE is the Seasonal Naive model followed closely by the ARIMA model and the ETS model with Multiplicative.
+The best RMSE on the test data is the Seasonal Naive model followed closely by the ARIMA model and the ETS Multiplicative model.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -1380,9 +1382,11 @@ fc_power_bc %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
+The above plot of the forecasts overlayed with the actual data indicates several of the models are able to predict the monthly seasonal pattern.
+
 ### Forecast
 
-Let's forecast for the year 2014 with the three best performing models.
+Let's forecast for the year 2014 with all the models.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 50 months, which covers the end of the provided time series and the next 12 months of 2014
@@ -1401,10 +1405,23 @@ fc_power_bc14 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-Go with the ARIMA model.
+Even though the Seasonal Naive model performed the best on the Go with the ARIMA model.
+
+Maybe just go with Seasona Naive
 
 ```{r warning=F, message=F}
 # Write to excel
+# dataframe for Excel output
+
+## TODO: FIX BELOW WITH THE CORRECT OBJECTS
+atm4_forecast_may2010 <- fc_atm4_final %>%
+  filter(.model == "ETS_Mult", DATE > "2010-04-30")
+
+atm4_forecast_may2010 <- data.frame(atm4_forecast_may2010) %>%
+  select(c(DATE, ATM, .mean))%>%
+  rename(Cash = .mean)
+
+atm4_forecast_may2010
 ```
 
 # Part C – Waterflow (optional)
