@@ -1,5 +1,5 @@
 ---
-title: "DATA 624 Project 1 v2"
+title: "DATA 624 Project 1"
 subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
 date: "`r format(Sys.time(), '%d %B %Y')`"
@@ -319,6 +319,12 @@ The plot of the test forecasts confirms the models are correctly capturing the s
 fit_atm1_arima<- train_atm1 %>%
   model(ARIMA(Cash))
 
+report(fit_atm1_arima)
+```
+
+The definition of the ARIMA model is shown above.
+
+```{r warning=F, message=F}
 # Check the residuals of ARIMA
 fit_atm1_arima %>% gg_tsresiduals()
 ```
@@ -372,7 +378,7 @@ fc_atm1_bc <- fit_atm1_bc %>% forecast(h = "16 days")
 fc_atm1_bc %>% accuracy(new_seasonal_atm1)
 ```
 
-The RMSE of the ARIMA model with Box-Cox transformation on the test data does improve the RMSE compared to the ARIMA model without transformation from 12.812248 to 11.53609.
+The RMSE of the ARIMA model with Box-Cox transformation on the test data does improve the RMSE compared to the ARIMA model without transformation from 12.812248 to 11.53609. The Seasonal Naive RMSE increases with the transformation from 9.643651 to 9.87190. From all the results with and without transformation, the Seasonal Naive model without transformation performs the best on the test dataset.
 
 ```{r warning=F, message=F}
 # Plot forecasts against actual values
@@ -395,10 +401,11 @@ The above plot shows the forecasts of the models with transformation along with 
 
 Given the assignment is to forecast the data for May 2010 from the provided data, I believe the models generated from the final two and a half months is the appropriate approach. Clearly, a shift in the weekly pattern occurs in February 2010 and without any additional context or history, I assume that shift will continue through May 2010. As the forecast is only 1 month or approximately four more weeks from the end of the provided data, then I choose to believe that new pattern will persist for the next four weeks through May 2010.
 
+Based on the results of the seasonal models with and without the Box-Cox transformation, I've chosen the Seasonal Naive model without transformation to forecast the May 2010 values. The model performed on par, if not better, than the more complex models, and did not produce any negative values as seen in the ARIMA model. In the interest of simplicity and good results, the Seasonal Naive model is selected.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks) plus the 31 days of May
-fc_atm1_final <- fit_atm1_bc %>% forecast(h = "47 days")
+fc_atm1_final <- fit_atm1 %>% forecast(h = "47 days")
 
 # Plot forecasts against actual values
 fc_atm1_final %>%
@@ -412,15 +419,16 @@ fc_atm1_final %>%
     title = "Forecasts for ATM1 Withdrawals"
   ) +
   guides(colour = guide_legend(title = "Forecast"))
-
-fc_atm1_final %>%
-  filter(.model == "Arima")
 ```
+
+Forecasts of May 2010 for ATM1.
+
+Prepare forecast `fable` for input into Excel file for ATM1.
 
 ```{r warning=F, message=F}
 # dataframe for Excel output
 atm1_forecast_may2010 <- fc_atm1_final %>%
-  filter(.model == "Arima", DATE > "2010-04-30")
+  filter(.model == "Seasonal naive", DATE > "2010-04-30")
 
 atm1_forecast_may2010 <- data.frame(atm1_forecast_may2010) %>%
   select(c(DATE, ATM, .mean))%>%
@@ -428,6 +436,8 @@ atm1_forecast_may2010 <- data.frame(atm1_forecast_may2010) %>%
 
 atm1_forecast_may2010
 ```
+
+ATM1 final forecast values.
 
 ## ATM2
 
@@ -598,19 +608,23 @@ The plot of the test forecasts confirms the models are correctly capturing the s
 
 ```{r warning=F, message=F}
 fit_atm2_ets <- train_atm2 %>%
-  model(ETS_Mult = ETS(Cash ~ error("M") + trend("N") + season("M")))
+  model(ETS_Add = ETS(Cash ~ error("A") + trend("N") + season("A")))
 
+report(fit_atm2_ets)
+```
+
+The resulting ETS Additive model definition is defined above.
+
+```{r warning=F, message=F}
 # Check the residuals of ARIMA
 fit_atm2_ets %>% gg_tsresiduals()
 ```
 
-TODO: Update to ETS_ADD above
-
-Similar to ARIMA with ATM1, I've displayed the residuals of the ETS Multiplicative model to assess the appropriateness of the model. The plot of Innovation residuals appears to follow white noise. The ACF plot indicates no correlation outside of the confidence intervals.
+Similar to ARIMA with ATM1, I've displayed the residuals of the ETS Additive model to assess the appropriateness of the model. The plot of Innovation residuals appears to follow white noise. The ACF plot indicates only correlation at lag 13, but otherwise no correlation outside of the confidence intervals.
 
 ### ATM2 Conclusion
 
-TODO: Explain the good RMSE and the visual inspection below. Going with ETS-Add
+After considering the RMSE of the ETS Additive model for both the training and test datasets along with the visual inspection of the forecasted values through May 2010, I've decided to use the forecast values from the ETS Additive model. The ETS Multiplicative did have the best RMSE on the test dataset but the visual inspection of the forecast values shows a growing variance I don't expect in the time series over the next month. I believe the Seasonal Naive, ARIMA, and ETS Additive models each show promising results on the test and appear to follow the seasonal pattern based on visual assessment, so I've selected ETS Additive based on the accuracy on the training and test datasets.
 
 ```{r warning=F, message=F}
 # Generate forecasts for 16 days (two weeks) plus the 31 days of May
@@ -628,10 +642,9 @@ fc_atm2_final %>%
     title = "Forecasts for ATM2 Withdrawals"
   ) +
   guides(colour = guide_legend(title = "Forecast"))
-
-fc_atm2_final %>%
-  filter(.model == "ETS_Add")
 ```
+
+Forecasts of May 2010 for ATM2 models.
 
 ```{r warning=F, message=F}
 # dataframe for Excel output
@@ -644,6 +657,7 @@ atm2_forecast_may2010 <- data.frame(atm2_forecast_may2010) %>%
 
 atm2_forecast_may2010
 ```
+ATM2 final forecast values.
 
 ## ATM3
 
@@ -721,7 +735,7 @@ Not a very interesting plot of the forecasted data in relation to the ATM3 datas
 
 ### ATM3 Conclusion
 
-There's only 3 values with data above zero, so I'm assuming there was absolutely no activity but the ATM3 existed, or else it would have NA.
+With only three values with data above zero, so I'm assuming there was absolutely no activity but the ATM3 existed, or else it would have NA. The Mean model is selected as the only viable model to use for three values.
 
 ```{r warning=F, message=F}
 # dataframe for Excel output
@@ -733,6 +747,8 @@ atm3_forecast_may2010 <- data.frame(atm3_forecast_may2010) %>%
 
 atm3_forecast_may2010
 ```
+
+ATM3 final forecast values.
 
 ## ATM4
 
@@ -981,12 +997,18 @@ fc_atm4 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-The plot of the forecasts for the five seasonal models shows the ETS Additive and ETS Multiplicative models as following the weekly pattern best. The ARIMA model results in a constant, horizontal line while the ETS with dampening immediately starts producing negative values, which is not helpful. Given the small sample size above, the Seasonal Naive model does product a model following the weekly seasonal pattern.
+The plot of the forecasts for the five seasonal models shows the ETS Additive and ETS Multiplicative models as following the weekly pattern best. The ARIMA model results in a constant, horizontal line while the ETS with dampening immediately starts producing negative values, which is not helpful. Given the small sample size above, the Seasonal Naive model does produce a model following the weekly seasonal pattern.
 
 ```{r warning=F, message=F}
 fit_atm4_ets <- train_atm4 %>%
   model(ETS_Mult = ETS(Cash ~ error("M") + trend("N") + season("M")))
 
+report(fit_atm4_ets)
+```
+
+The definition of the ETS Multiplicative model is defined above.
+
+```{r warning=F, message=F}
 # Check the residuals of ARIMA
 fit_atm4_ets %>% gg_tsresiduals()
 ```
@@ -1079,10 +1101,9 @@ fc_atm4_final %>%
     title = "Forecasts for ATM1 Withdrawals"
   ) +
   guides(colour = guide_legend(title = "Forecast"))
-
-fc_atm4_final %>%
-  filter(.model == "ETS_Mult")
 ```
+
+Forecasts for the ATM4 models.
 
 ```{r warning=F, message=F}
 # dataframe for Excel output
@@ -1096,9 +1117,11 @@ atm4_forecast_may2010 <- data.frame(atm4_forecast_may2010) %>%
 atm4_forecast_may2010
 ```
 
+ATM4 final forecast values.
+
 ## Overall daily totals across all four ATMs
 
-I really wanted to find some underlying relationship between the four different ATMs that would better explain some of the outliers and anamolies and perhaps provide clarity to the shift in the weekly pattern in February 2010. I totaled the daily withdrawals across the four ATMs in the hopes of seeing a clear pattern when combined.
+I really wanted to find some underlying relationship between the four different ATMs that would better explain some of the outliers and anomalies and perhaps provide clarity to the shift in the weekly pattern in February 2010. I totaled the daily withdrawals across the four ATMs in the hopes of seeing a clear pattern when combined.
 
 ```{r warning=F, message=F}
 
@@ -1396,6 +1419,28 @@ fc_power_bc %>%
 
 The above plot of the forecasts overlayed with the actual data indicates several of the models are able to predict the monthly seasonal pattern well.
 
+```{r warning=F, message=F}
+fit_power_arima <- train_power_data %>%
+  model(ARIMA(box_cox(KWH, lambda)))
+
+report(fit_power_arima)
+```
+
+The report of the ARIMA model indicates an ARIMA(1,0,1)(0,1,1)[12] with drift. The result indicates a seasonal differencing of 1 along with a seasonal MA term of 1. The non-seasonal (p,d,q) shows an AR term of 1 and an MA term of 1. The seasonal lag is denoted as 12, which is expected for the monthly data.
+
+```{r warning=F, message=F}
+# Check the residuals of ARIMA
+fit_power_arima %>% gg_tsresiduals()
+```
+
+The ARIMA model residuals appears as white noise and do not show any correlation in the ACF plot.
+
+```{r warning=F, message=F}
+augment(fit_power_arima) %>% features(.innov, ljung_box, lag=24, dof=4)
+```
+
+Based on the Ljung-Box test result, the large p-value confirms the residuals are similar to white noise.
+
 ### Forecast
 
 Let's forecast for the year 2014 with all the models. The forecast will be for 50 months instead of 38 as above in order to capture the data for 2014.
@@ -1417,34 +1462,40 @@ fc_power_bc14 %>%
   guides(colour = guide_legend(title = "Forecast"))
 ```
 
-Even though the Seasonal Naive model performed the best on the Go with the ARIMA model.
-
-Maybe just go with Seasonal Naive
+Based on the good results of the ARIMA model on the training and test data, I've selected the ARIMA model for the final forecast values for 2014. The Seasonal Naive model did well, but I believe the ARIMA model will more accurately identify the nuance in the next year over the Seasonal Naive model.
 
 ```{r warning=F, message=F}
 # Write to excel
 # dataframe for Excel output
+Residental_Forecast_2014 <- fc_power_bc14 %>%
+  filter(.model == "Arima", Month > yearmonth("2013 Dec"))
 
-## TODO: FIX BELOW WITH THE CORRECT OBJECTS
-atm4_forecast_may2010 <- fc_atm4_final %>%
-  filter(.model == "ETS_Mult", DATE > "2010-04-30")
+Residental_Forecast_2014 <- data.frame(Residental_Forecast_2014) %>%
+  select(c(Month, .mean))%>%
+  rename(KWH = .mean)
 
-atm4_forecast_may2010 <- data.frame(atm4_forecast_may2010) %>%
-  select(c(DATE, ATM, .mean))%>%
-  rename(Cash = .mean)
+# Multiply by 1000 to return to original form
+Residental_Forecast_2014$KWH <- Residental_Forecast_2014$KWH * 1e3
+Residental_Forecast_2014$Month <- as.character(Residental_Forecast_2014$Month)
 
-atm4_forecast_may2010
+Residental_Forecast_2014 <- Residental_Forecast_2014 %>%
+  mutate(Month = str_replace(Month, " ", "-")) %>%
+  rename(`YYYY-MMM` = Month)
+
+Case_Seq <- c(seq(from=925, to=936))
+
+Residental_Forecast_2014 <- bind_cols(CaseSequence=Case_Seq, Residental_Forecast_2014)
+
+# Write to Excel file
+write_xlsx(Residental_Forecast_2014, "data/ptanofsky_kwh_forecast_2014.xlsx")
 ```
+
 
 # Part C – Waterflow (optional)
 
 - Dataset: Waterflow_Pipe1.xlsx and Waterflow_Pipe2.xlsx
 
 Part C consists of two data sets. These are simple 2 columns sets, however they have different time stamps.  Your optional assignment is to time-base sequence the data and aggregate based on hour (example of what this looks like, follows).  Note for multiple recordings within an hour, take the mean.  Then to determine if the data is stationary and can it be forecast.  If so, provide a week forward forecast and present results via Rpubs and .rmd and the forecast in an Excel readable file. 
-
-```{r warning=F, message=F}
-
-```
 
 ```{r warning=F, message=F}
 library(lubridate)
@@ -1462,16 +1513,11 @@ pipe2_data_raw$`Date Time` <- as.POSIXct(pipe2_data_raw$`Date Time`,
                               origin="1899-12-30",
                               tz="GMT")
 
+#summary(pipe1_data_raw)
+#summary(pipe2_data_raw)
 
-# Initial output to see data
-#head(pipe1_data_raw)
-#head(pipe2_data_raw)
-
-summary(pipe1_data_raw)
-summary(pipe2_data_raw)
-
-dim(pipe1_data_raw)
-dim(pipe2_data_raw)
+#dim(pipe1_data_raw)
+#dim(pipe2_data_raw)
 ```
 
 ```{r warning=F, message=F}
@@ -1489,9 +1535,10 @@ pipe1_data_raw <- pipe1_data_raw %>%
   select(c(`Date Time`, WF_AVG)) %>%
   rename(WaterFlow = WF_AVG)
 
-summary(pipe1_data_raw)
+head(pipe1_data_raw)
 ```
 
+Above output confirms the average of Pipe 1 has been calculated for each hour. **Note:** I applied the ceiling to each timestamp of Pipe 1 to the nearest hour, so the Pipe 1 and Pipe 2 datasets line up and both begin with "2015-10-23 01:00:00".
 
 ```{r warning=F, message=F}
 # Define as tsibble
@@ -1499,47 +1546,30 @@ pipe1_data_ts <- pipe1_data_raw %>%
   as_tsibble(index = `Date Time`)
 
 pipe1_data_ts %>% autoplot()
+```
 
+The above plot is a simply visualization of the Pipe 1 waterflow data.
+
+```{r warning=F, message=F}
 pipe2_data_ts <- pipe2_data_raw %>%
   as_tsibble(index = `Date Time`)
 
 pipe2_data_ts %>% 
+  autoplot(colour = "gray") +
+  autolayer(pipe1_data_ts, colour = "#0072B2")
+```
+
+The above plot shows the Pipe 1 hourly mean data in blue overlayed on the Pipe 2 provided hourly data in gray.
+
+```{r warning=F, message=F}
+pipe2_data_ts %>% 
   filter_index("2015-10-23" ~ "2015-11-01") %>%
-  autoplot() +
-  autolayer(pipe1_data_ts)
+  autoplot(colour = "gray") +
+  autolayer(pipe1_data_ts, colour = "#0072B2")
 ```
 
+In an attempt to better compare the Pipe 1 and Pipe 2 data, I've truncated the plot to only include the hours in which data is available for both pipe waterflows.
 
+### A Conclusion of Sorts
 
-
-#30#
-
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-
-```{r warning=F, message=F}
-
-```
-
-
-
-
-
-
-
-
-
-
-
-
+Unfortunately, I didn't allot myself the time needed to tackle Part C. I performed the initial data wrangling above to find the mean for Pipe 1 waterflow by hour. The initial plots above for visual inspection didn't provide any initial insights, so I didn't move forward with any modeling. The discrepancy in the dates for Pipe 1 and Pipe 2 data provided definitely requires additional analysis. 
