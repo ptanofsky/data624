@@ -73,7 +73,7 @@ dim(fp_data)
 #str(fp_data)
 ```
 
-719 features with near zero variance. thus 388 features remaining.
+**Answer:** 719 features with near zero variance, thus 388 features remaining for modeling.
 
 ## Section c
 
@@ -88,6 +88,7 @@ set.seed(8675309)
 
 #summary(fp_data)
 
+# Use 80% for training
 trainingRows <- createDataPartition(fp_data$Permeability, p = .80, list=FALSE)
 
 # Training set
@@ -101,11 +102,13 @@ plsFit <- plsr(Permeability ~ ., data=training_data)
 plsFit
 ```
 
+I'll admit, this initial model was not helpful. On to the tuning of the model.
+
 ```{r warning=F, message=F}
 # Training pls model based on book example
 ctrl <- trainControl(method = "cv", number = 10)
 
-# No metric parameter defaults to RMSE
+# NOTE: No metric parameter defaults to RMSE
 plsTune <- train(Permeability ~ .,
                 data = training_data,
                 method = "pls",
@@ -116,8 +119,13 @@ plsTune <- train(Permeability ~ .,
 
 plsTune
 
-ggplot(plsTune)
+ggplot(plsTune) + labs(title="PLS Model Component Tuning")
 ```
+
+First, the data was split - 80% for training and 20% for the test set. The data was pre-processed using the `preProcess` parameter in the `train` function in order to center and scale the predictors. The PLS model was tuned by way of cross-validation performed 10-fold with a tune length of 20.
+
+
+**Answer:** Apparently, the running of the chunks in Rstudio and knitting the .rmd file are producing slightly different results. The knitted results above show an optimal latent variables count of 8 with a corresponding $R^2$ value of 0.5674378. The best performing RMSE seen above is 10.74673, also for the variable count of 8. When running the chunks in Rstudio, the optimal number of latent variables is 9 based on the corresponding $R^2$ value of 0.5322824. The best performing RMSE seen above is 10.75441, which resulted from the latent variable count of 8.
 
 ## Section d
 
@@ -128,13 +136,21 @@ preds_test <- predict(plsTune, test_data)
 postResample(pred=preds_test, obs=test_data$Permeability)
 ```
 
+**Answer:** For the test set predictions, the estimate of $R^2$ is 0.398143.
+
 ## Section e
 
 Try building other models discussed in this chapter. Do any have better predictive performance?
 
-ridge-regression
-lasso
-elastic net
+I have attempted models of type:
+
+- Ridge Regression
+
+- Lasso
+
+- Elastic Net
+
+### Ridge Regression Model
 
 ```{r warning=F, message=F}
 # Ridge regression
@@ -151,8 +167,23 @@ ridgeRegFit <- train(Permeability ~ .,
                      preProc = c("center", "scale"))
 
 ridgeRegFit
-ggplot(ridgeRegFit)
+ggplot(ridgeRegFit) + labs(title="Ridge Regression Model With Tuning")
+
+preds_test_rr <- predict(ridgeRegFit, test_data) 
+postResample(pred=preds_test_rr, obs=test_data$Permeability)
 ```
+
+The best performing ridge-regression model used a lambda value of 0.5, which resulted:
+
+- $R^2$: 0.5729303
+
+- RMSE: 13.08302
+
+The best RMSE is 12.12525 with lambda of 0.2.
+
+On the test set, the $R^2$ is 0.4319239.
+
+### Lasso Model
 
 ```{r warning=F, message=F}
 lassoGrid <- data.frame(.fraction = seq(0, 0.5, by=0.05))
@@ -166,8 +197,23 @@ lassoFit <- train(Permeability ~ .,
                   preProcess = c('center','scale'))
 
 lassoFit
-ggplot(lassoFit)
+ggplot(lassoFit) + labs(title="Lasso Model With Tuning")
+
+preds_test_ls <- predict(lassoFit, test_data) 
+postResample(pred=preds_test_ls, obs=test_data$Permeability)
 ```
+
+The best performing lasso model used a fraction value of 0.4, which resulted:
+
+- $R^2$: 0.5286524
+
+- RMSE: 10.63854
+
+The best RMSE is 10.61055 with fraction value of 0.35.
+
+On the test set, the $R^2$ is 0.2644105.
+
+### Elastic Net Model
 
 ```{r warning=F, message=F}
 # Elastic Net
@@ -183,16 +229,34 @@ enetFit <- train(Permeability ~ .,
                  trControl = ctrl,
                  preProcess = c('center','scale'))
 enetFit
-ggplot(enetFit)
+ggplot(enetFit) + labs(title="Elastic Net Model With Tuning")
+
+preds_test_en <- predict(enetFit, test_data) 
+postResample(pred=preds_test_en, obs=test_data$Permeability)
 ```
+
+The best performing elastic net model used a fraction value of 0.5 and lambda = 0, which resulted:
+
+- $R^2$: 0.5150926
+
+- RMSE: 11.37484
+
+The best RMSE is 11.16564 with fraction value of 0.30 and lambda = 0.01.
+
+On the test set, the $R^2$ is 0.2410341.
 
 ## Section f
 
 Would you recommend any of your models to replace the permeability laboratory experiment?
 
-```{r warning=F, message=F}
+Based solely on the test set estimates of $R^2$, the ridge regression model performed the best with $R^2$ 0.4319239, as compared to $R^2$ 0.398143 from the PLS model. That being said, these results indicate that the models account for less than half of the variation in the dependent variable that is predictable from the predictors. The permeability assay is expensive labor intensive according to the book, but I don't think any of the above models account for enough variation in the dependent variables to be reliable replacements for the laboratory experiment.
 
-```
+== Remove below
+As the textbook outlines, by adding the penalty of the Ridge Regression model, we are making a trade-off between the model variance and bias. By sacrificing some bias inherent in PLS, we can often reduce the variance enough to make the overall MSE lower than unbiased models. 
+
+Again, from the textbook, "PLS finds components that maximally summarize the variation of the predictors while simultaneously requiring these components to have maximum correlation with the response. PLS therefore strikes a compromise between the objectives of predictor space dimension reduction and a predictive relationship with the response."
+== Remove above
+
 
 -----
 
@@ -216,7 +280,7 @@ cmp_data <- as.data.frame(ChemicalManufacturingProcess)
 #head(cmp_data)
 ```
 
-The matrix `processPredictors` contains the 57 predictors (12 describing the input biological material and 45 describing the process predictors) for the 176 manufacturing runs. yield contains the percent yield for each run.
+The matrix `processPredictors` contains the 57 predictors (12 describing the input biological material and 45 describing the process predictors) for the 176 manufacturing runs. Yield contains the percent yield for each run.
 
 Not sure what `processPredictors` actually refers to, but it's not an object from the `AppliedPredictiveModeling` library.
 
@@ -240,7 +304,9 @@ vis_miss(cmp_full_data)
 # Note: By using knnImpute, all the data has been centered and scaled
 ```
 
-Above plot confirms no missing values in the predictor columns after applying the kNN imputation approach based on the `preProcess` function.
+The initial plot from `vis_miss` indicates missing values. 
+
+The second plot above confirms no missing values in the predictor columns after applying the kNN imputation approach based on the `preProcess` function.
 
 ## Section c
 
@@ -267,7 +333,7 @@ test_data <- cmp_full_data[-trainingRows, ]
 
 ### Start with PLS model as performed in Exercise 6.2
 
-# Training pls model based on book example
+# Training PLS model based on book example
 ctrl <- trainControl(method = "cv", number = 10)
 
 # No metric parameter defaults to RMSE
@@ -281,26 +347,35 @@ plsTune <- train(Yield ~ .,
 
 plsTune
 
-ggplot(plsTune)
+ggplot(plsTune) + labs(title="PLS Model With Component Tuning")
 ```
+
+Based on the performance metric of $R^2$, the latent variable count of 4 resulted in 0.5619734.
 
 ## Section d
 
 Predict the response for the test set. What is the value of the performance metric and how does this compare with the re-sampled performance metric on the training set?
 
 ```{r warning=F, message=F}
-
+preds_test_pls <- predict(plsTune, test_data) 
+postResample(pred=preds_test_pls, obs=test_data$Yield)
 ```
+
+For the test set, the $R^2$ result is 0.5463996, which is quite close to the 0.5619734 value from the training set.
 
 ## Section e
 
 Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?
 
 ```{r warning=F, message=F}
-
+varImp(plsTune)
 ```
 
+As the output above indicates, the top 8 results are Manufacturing Process (process predictors) and 12 of the top 20, while the biological predictors are just 8 of the top 20. BiologicalMaterial02, the biological predictor with the higest score, only results in variable importance of 53.90%. The top 5 Manufacturing Process predictors score greater than 75%.
+
 ## Section f
+
+TODO
 
 Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?
 
