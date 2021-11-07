@@ -13,6 +13,7 @@ library(caret)
 library(tidyverse)
 library(pls)
 library(elasticnet)
+library(corrplot)
 ```
 
 # Exercise 6.2
@@ -251,13 +252,6 @@ Would you recommend any of your models to replace the permeability laboratory ex
 
 Based solely on the test set estimates of $R^2$, the ridge regression model performed the best with $R^2$ 0.4319239, as compared to $R^2$ 0.398143 from the PLS model. That being said, these results indicate that the models account for less than half of the variation in the dependent variable that is predictable from the predictors. The permeability assay is expensive labor intensive according to the book, but I don't think any of the above models account for enough variation in the dependent variables to be reliable replacements for the laboratory experiment.
 
-== Remove below
-As the textbook outlines, by adding the penalty of the Ridge Regression model, we are making a trade-off between the model variance and bias. By sacrificing some bias inherent in PLS, we can often reduce the variance enough to make the overall MSE lower than unbiased models. 
-
-Again, from the textbook, "PLS finds components that maximally summarize the variation of the predictors while simultaneously requiring these components to have maximum correlation with the response. PLS therefore strikes a compromise between the objectives of predictor space dimension reduction and a predictive relationship with the response."
-== Remove above
-
-
 -----
 
 # Exercise 6.3
@@ -368,32 +362,28 @@ For the test set, the $R^2$ result is 0.5463996, which is quite close to the 0.5
 Which predictors are most important in the model you have trained? Do either the biological or process predictors dominate the list?
 
 ```{r warning=F, message=F}
-varImp(plsTune)
+var_imp <- varImp(plsTune)
+
+var_imp
 ```
 
-As the output above indicates, the top 8 results are Manufacturing Process (process predictors) and 12 of the top 20, while the biological predictors are just 8 of the top 20. BiologicalMaterial02, the biological predictor with the higest score, only results in variable importance of 53.90%. The top 5 Manufacturing Process predictors score greater than 75%.
+As the output above indicates, the top 8 results are Manufacturing Process (process predictors) and 12 of the top 20, while the biological predictors are just 8 of the top 20. BiologicalMaterial02, the biological predictor with the highest score, only results in variable importance of 53.90%. The top 5 Manufacturing Process predictors score greater than 75%.
 
 ## Section f
 
-TODO
-
 Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+top10_preds <- var_imp$importance %>% as.data.frame() %>% arrange(desc(Overall)) %>% head(10) %>% rownames()
 
+vars <- c(top10_preds, "Yield")
+
+corr <- cmp_full_data %>% 
+  select(vars) %>% cor()
+
+corrplot(corr, method="number")
 ```
 
+To assess the relationships of the top predictors and the response, I've selected the top 10 predictors and generated a correlation plot along with the response variable `Yield`. The highest correlation with the response variable not surprising is ManufacturingProcess32. Interesting, ManufacturingProcess36, ManufacturingProcess13, and ManufacturingProcess17 have a negative correlation with `Yield`. If the goal is to improve `Yield`, then the predictors with positive correlation would be the variables to focus on, such as ManufacturingProcess32, ManufacturingProcess09, BiologicalMaterial02, and ManufacturingProcess33.
 
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
+As the premise of the question states "manufacturing process predictors can be changed in the manufacturing process," then the team should focus on improving predictors ManufacturingProcess32, ManufacturingProcess09, and ManufacturingProcess33 and lowering predictors ManufacturingProcess36, ManufacturingProcess13, and ManufacturingProcess17.
