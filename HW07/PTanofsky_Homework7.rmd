@@ -12,6 +12,7 @@ library(AppliedPredictiveModeling)
 library(caret)
 library(tidyverse)
 library(pls)
+library(elasticnet)
 ```
 
 # Exercise 6.2
@@ -137,11 +138,52 @@ elastic net
 
 ```{r warning=F, message=F}
 # Ridge regression
-#ridgeRegFit <-train(solTrainXtrans, solTrainY, + + + + + +
-#method = "ridge",
-## Fir the model over many penalty values tuneGrid = ridgeGrid, trControl = ctrl,
-## put the predictors on the same scale preProc = c("center", "scale"))
+# From book: Page 135
+# Define the candidate set of values
+ridgeGrid <- data.frame(.lambda = seq(0, 1, by = 0.1)) 
 
+ridgeRegFit <- train(Permeability ~ .,
+                     data = training_data,
+                     method = "ridge",
+                     metric = "Rsquared",
+                     tuneGrid = ridgeGrid,
+                     trControl = ctrl,
+                     preProc = c("center", "scale"))
+
+ridgeRegFit
+ggplot(ridgeRegFit)
+```
+
+```{r warning=F, message=F}
+lassoGrid <- data.frame(.fraction = seq(0, 0.5, by=0.05))
+
+lassoFit <- train(Permeability ~ .,
+                  data = training_data,
+                  method = 'lasso',
+                  metric = 'Rsquared',
+                  tuneGrid = lassoGrid,
+                  trControl = ctrl,
+                  preProcess = c('center','scale'))
+
+lassoFit
+ggplot(lassoFit)
+```
+
+```{r warning=F, message=F}
+# Elastic Net
+# From book: Page 136
+enetGrid <- expand.grid(.lambda = c(0, 0.01, .1),
+                        .fraction = seq(.05, 1, length = 20))
+
+enetFit <- train(Permeability ~ .,
+                 data = training_data,
+                 method = 'enet',
+                 metric = 'Rsquared',
+                 tuneGrid = enetGrid,
+                 trControl = ctrl,
+                 preProcess = c('center','scale'))
+enetFit
+ggplot(enetFit)
 ```
 
 ## Section f
@@ -222,11 +264,29 @@ training_data <- cmp_full_data[trainingRows, ]
 
 # Test set
 test_data <- cmp_full_data[-trainingRows, ]
+
+### Start with PLS model as performed in Exercise 6.2
+
+# Training pls model based on book example
+ctrl <- trainControl(method = "cv", number = 10)
+
+# No metric parameter defaults to RMSE
+plsTune <- train(Yield ~ .,
+                data = training_data,
+                method = "pls",
+                metric = "Rsquared",
+                tuneLength = 20,
+                trControl = ctrl,
+                preProc = c("center", "scale")) 
+
+plsTune
+
+ggplot(plsTune)
 ```
 
 ## Section d
 
-Predict the response for the test set. What is the value of the performance metric and how does this compare with the resampled performance metric on the training set?
+Predict the response for the test set. What is the value of the performance metric and how does this compare with the re-sampled performance metric on the training set?
 
 ```{r warning=F, message=F}
 
@@ -242,7 +302,7 @@ Which predictors are most important in the model you have trained? Do either the
 
 ## Section f
 
-Explore the relationships between each of the top predictors and the re-sponse. How could this information be helpful in improving yield in future runs of the manufacturing process?
+Explore the relationships between each of the top predictors and the response. How could this information be helpful in improving yield in future runs of the manufacturing process?
 
 ```{r warning=F, message=F}
 
