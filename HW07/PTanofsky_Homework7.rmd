@@ -26,12 +26,7 @@ Start R and use these commands to load the data:
 data(permeability)
 data(fingerprints)
 
-#print(fingerprints)
-
 fp_data <- as.data.frame(fingerprints)
-
-# Remove if not needed
-#as.data.frame(table(unlist(record)))
 
 perm_data <- as.data.frame(permeability)
 fp_data <- as.data.frame(fingerprints)
@@ -62,7 +57,6 @@ nzv_cols <- nearZeroVar(fp_data)
 length(nzv_cols)
 
 # From: https://stackoverflow.com/questions/28043393/nearzerovar-function-in-caret
-
 if(length(nzv_cols) > 0) fp_data <- fp_data[, -nzv_cols]
 
 dim(fp_data)
@@ -82,7 +76,7 @@ dim(fp_data)
 
 ## Section c
 
-Split the data into a training and a test set, pre-process the data, and tune a PLS model. How many latent variables are optimal and what is the corresponding resampled estimate of $R^2$?
+Split the data into a training and a test set, pre-process the data, and tune a PLS model. How many latent variables are optimal and what is the corresponding re-sampled estimate of $R^2$?
 
 ```{r plsFit, warning=F, message=F}
 # From textbook: Prior to performing PLS, the predictors should be centered and scaled,
@@ -101,20 +95,27 @@ training_data <- fp_data[trainingRows, ]
 # Test set
 test_data <- fp_data[-trainingRows, ]
 
-
+# Initial model following example from book
 plsFit <- plsr(Permeability ~ ., data=training_data)
-
 plsFit
 ```
 
 ```{r warning=F, message=F}
-plsTune <-train(solTrainXtrans, solTrainY,
+# Training pls model based on book example
+ctrl <- trainControl(method = "cv", number = 10)
+
+# No metric parameter defaults to RMSE
+plsTune <- train(Permeability ~ .,
+                data = training_data,
                 method = "pls",
+                metric = "Rsquared",
                 tuneLength = 20,
                 trControl = ctrl,
                 preProc = c("center", "scale")) 
 
 plsTune
+
+ggplot(plsTune)
 ```
 
 ## Section d
@@ -122,14 +123,24 @@ plsTune
 Predict the response for the test set. What is the test set estimate of $R^2$?
 
 ```{r warning=F, message=F}
-predict(plsFit, test_data) 
+preds_test <- predict(plsTune, test_data) 
+postResample(pred=preds_test, obs=test_data$Permeability)
 ```
 
 ## Section e
 
 Try building other models discussed in this chapter. Do any have better predictive performance?
 
+ridge-regression
+lasso
+elastic net
+
 ```{r warning=F, message=F}
+# Ridge regression
+#ridgeRegFit <-train(solTrainXtrans, solTrainY, + + + + + +
+#method = "ridge",
+## Fir the model over many penalty values tuneGrid = ridgeGrid, trControl = ctrl,
+## put the predictors on the same scale preProc = c("center", "scale"))
 
 ```
 
@@ -141,7 +152,7 @@ Would you recommend any of your models to replace the permeability laboratory ex
 
 ```
 
-===
+-----
 
 # Exercise 6.3
 
@@ -152,35 +163,65 @@ A chemical manufacturing process for a pharmaceutical product was discussed in S
 Start R and use these commands to load the data:
 
 ```{r warning=F, message=F}
-# Import required library
-library(AppliedPredictiveModeling)
+data(ChemicalManufacturingProcess)
 
+#str(ChemicalManufacturingProcess)
+#summary(ChemicalManufacturingProcess)
+dim(ChemicalManufacturingProcess)
+#head(ChemicalManufacturingProcess)
+cmp_data <- as.data.frame(ChemicalManufacturingProcess)
 
-cmp_data <- data(chemicalManufacturingProcess)
-
-head(cmp_data)
+#head(cmp_data)
 ```
 
 The matrix `processPredictors` contains the 57 predictors (12 describing the input biological material and 45 describing the process predictors) for the 176 manufacturing runs. yield contains the percent yield for each run.
 
-```{r warning=F, message=F}
-
-```
+Not sure what `processPredictors` actually refers to, but it's not an object from the `AppliedPredictiveModeling` library.
 
 ## Section b
 
 A small percentage of cells in the predictor set contain missing values. Use an imputation function to fill in these missing values (e.g., see Sect. 3.8).
 
 ```{r warning=F, message=F}
+# Let's identify the missing values first using vis_miss
+library(naniar)
+library(RANN)
+vis_miss(cmp_data)
 
+# Let's try to impute using preprocess function
+# And make sure not to transform the 'Yield' column which is the result
+cmp_preprocess_data <- preProcess(cmp_data[, -c(1)], method="knnImpute")
+
+cmp_full_data <- predict(cmp_preprocess_data, cmp_data[, -c(1)])
+cmp_full_data$Yield <- cmp_data$Yield
+vis_miss(cmp_full_data)
+# Note: By using knnImpute, all the data has been centered and scaled
 ```
+
+Above plot confirms no missing values in the predictor columns after applying the kNN imputation approach based on the `preProcess` function.
 
 ## Section c
 
 Split the data into a training and a test set, pre-process the data, and tune a model of your choice from this chapter. What is the optimal value of the performance metric?
 
 ```{r warning=F, message=F}
+# Set the random number seed so we can reproduce the results
+# Jenny, I got your number
+set.seed(8675309)
 
+nzv_cols <- nearZeroVar(cmp_full_data)
+length(nzv_cols)
+# From: https://stackoverflow.com/questions/28043393/nearzerovar-function-in-caret
+if(length(nzv_cols) > 0) cmp_full_data <- cmp_full_data[, -nzv_cols]
+dim(cmp_full_data)
+
+trainingRows <- createDataPartition(cmp_full_data$Yield, p = .80, list=FALSE)
+
+# Training set
+training_data <- cmp_full_data[trainingRows, ]
+
+# Test set
+test_data <- cmp_full_data[-trainingRows, ]
 ```
 
 ## Section d
