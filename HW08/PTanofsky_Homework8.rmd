@@ -1,0 +1,116 @@
+---
+title: "DATA 624 Assignment 8"
+subtitle: "CUNY Fall 2021"
+author: "Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(AppliedPredictiveModeling)
+library(caret)
+#library(tidyverse)
+#library(pls)
+#library(elasticnet)
+#library(corrplot)
+```
+
+# Exercise 7.2
+
+Friedman (1991) introduced several benchmark data sets create by sim-ulation. One of these simulations used the following nonlinear equation to create data:
+$$y =10 sin(\pi x_1x_2) + 20(x_3 − 0.5)^2 +10x_4 +5x_5 +N(0,\sigma^2)$$
+where the $x$ values are random variables uniformly distributed between [0, 1] (there are also 5 other non-informative variables also created in the simula-tion). The package mlbench contains a function called `mlbench.friedman1` that simulates these data:
+
+```{r warning=F, message=F}
+library(mlbench)
+set.seed(200)
+trainingData <-mlbench.friedman1(200, sd = 1)
+## We convert the 'x' data from a matrix to a data frame
+## One reason is that this will give the columns names.
+trainingData$x <-data.frame(trainingData$x)
+## Look at the data using
+featurePlot(trainingData$x, trainingData$y)
+## or other methods.
+
+## This creates a list with a vector 'y' and a matrix
+## of predictors 'x'. Also simulate a large test set to
+## estimate the true error rate with good precision:
+testData <-mlbench.friedman1(5000, sd = 1)
+testData$x <-data.frame(testData$x) 
+```
+
+Tune several models on these data. For example:
+
+```{r warning=F, message=F}
+library(caret)
+knnModel <-train(x = trainingData$x,
+                 y = trainingData$y,
+                 method = "knn",
+                 preProc = c("center", "scale"),
+                 tuneLength = 10)
+knnModel
+```
+
+```{r warning=F, message=F}
+knnPred <-predict(knnModel, newdata = testData$x)
+## The function 'postResample' can be used to get the test set
+## perforamnce values
+postResample(pred = knnPred, obs = testData$y)
+```
+
+Which models appear to give the best performance? Does MARS select the informative predictors (those named `X1`–`X5`)?
+
+```{r warning=F, message=F}
+
+```
+
+# Exercise 7.5
+
+Exercise 6.3 describes data for a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several nonlinear regression models.
+
+## Section a
+
+Which nonlinear regression model gives the optimal re-sampling and test set performance?
+
+```{r warning=F, message=F}
+
+```
+
+## Section b
+
+Which predictors are most important in the optimal nonlinear regres-sion model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?
+
+```{r warning=F, message=F}
+
+```
+
+## Section c
+
+Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield?
+
+```{r warning=F, message=F}
+
+```
+
+
+#30#
+
+
+
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
