@@ -1,0 +1,42 @@
+---
+title: "DATA 624 Project 2 v1"
+subtitle: "CUNY Fall 2021"
+author: "Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: html_document
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(AppliedPredictiveModeling)
+library(caret)
+#library(tidyverse)
+#library(pls)
+#library(elasticnet)
+#library(corrplot)
+```
+
+
+
+
+
+#30#
+
+
+
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
