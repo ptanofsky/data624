@@ -16,9 +16,10 @@ library(caret)
 #library(corrplot)
 library(earth)
 library(kernlab)
+library(mlbench)
 
 # Set seed once for entire file
-set.seed(8675309)
+set.seed(200)
 ```
 
 # Exercise 7.2
@@ -28,7 +29,6 @@ $$y = 10 sin(\pi x_1x_2) + 20(x_3 − 0.5)^2 +10x_4 +5x_5 +N(0,\sigma^2)$$
 where the $x$ values are random variables uniformly distributed between [0, 1] (there are also 5 other non-informative variables also created in the simulation). The package `mlbench` contains a function called `mlbench.friedman1` that simulates these data:
 
 ```{r warning=F, message=F}
-library(mlbench)
 # n = number of patterns to create
 # sd = standard deviation of noise
 trainingData <- mlbench.friedman1(200, sd = 1)
@@ -53,7 +53,6 @@ Tune several models on these data. For example:
 ## K-Nearest Neighbors Model
 
 ```{r warning=F, message=F}
-library(caret)
 knnModel <- train(x = trainingData$x,
                   y = trainingData$y,
                   method = "knn",
@@ -62,6 +61,8 @@ knnModel <- train(x = trainingData$x,
 knnModel
 
 ggplot(knnModel) + labs(title="Knn Model With Tuning")
+
+varImp(knnModel)
 ```
 
 ```{r warning=F, message=F}
@@ -79,12 +80,12 @@ Which models appear to give the best performance? Does MARS select the informati
 # 200 observations of 10 variables
 # x is a dataframe of 10 variables X1:X10
 # y is a numeric value
-str(trainingData)
-summary(trainingData)
+#str(trainingData)
+#summary(trainingData)
 
 # 5000 observations of 10 variables
-str(testData)
-summary(testData)
+#str(testData)
+#summary(testData)
 ```
 
 # Neural Networks
@@ -94,18 +95,19 @@ summary(testData)
 # column numbers that should be removed to keep all pair-wise
 ## correlations below a threshold
 tooHigh <- findCorrelation(cor(trainingData$x), cutoff=0.75)
+tooHigh
 trainXnnet <- trainingData$x[, -tooHigh]
 testXnnet <- testData$x[, -tooHigh]
 
 ctrl <- trainControl(method = "cv", number = 10)
 
 # Create a specific candidate set of models to evaluate:
-nnetGrid <- expand.grid(decay = c(0, 0.01, .1),
-                        size = c(1:10),
+nnetGrid <- expand.grid(.decay = c(0, 0.01, .1),
+                        .size = c(1:10),
                         # The next option is to use bagging (see the
                         # next chapter) instead of different random
                         # seeds
-                        bag=FALSE)
+                        .bag=FALSE)
 
 nnetTune <- train(trainingData$x, trainingData$y,
                   method="avNNet",
@@ -116,10 +118,21 @@ nnetTune <- train(trainingData$x, trainingData$y,
                   preProc = c("center", "scale"),
                   linout=TRUE,
                   trace=FALSE,
-                  MaxNWts = 10 * (ncol(trainXnnet) + 1) + 10 + 1,
+                  MaxNWts = 10 * (ncol(trainingData$x) + 1) + 10 + 1,
                   maxit=500)
 
-head(predict(nnetTune, testData$x))
+# Output tuned model
+nnetTune
+# TODO: Remove this plot; not helpful
+# Plot trained/tuned model
+ggplot(nnetTune) + labs(title="Neural Networks Model With Tuning")
+
+# Make predictions on Test set
+nnetPred <-predict(nnetTune, newdata = testData$x)
+# Output prediction performance
+postResample(pred = nnetPred, obs = testData$y)
+
+varImp(nnetTune)
 ```
 
 ## MARS
@@ -135,34 +148,45 @@ marsTuned <- train(trainingData$x,
                    method = "earth",
                    # Explicitly declare the candidate models to test
                    tuneGrid = marsGrid,
-                   trControl = trainControl(method = "cv"))
+                   trControl = ctrl)
+# Output model
+marsTuned
+# Plot model
+ggplot(marsTuned) + labs(title="MARS Model With Tuning")
 
-head(predict(marsTuned, testData$x))
+# Make predictions on Test set
+marsPred <-predict(marsTuned, newdata = testData$x)
+# Output prediction performance
+postResample(pred = marsPred, obs = testData$y)
 
+# Variable importance of MARS model
 varImp(marsTuned)
 ```
 
 ## Support Vector Machines
 
 ```{r warning=F, message=F}
-#svmFit <- ksvm(x = trainingData$x,
-#               y = trainingData$y,
-#               kernel = "rbfdot", 
-#               kpar = "automatic",
-#               C = 1, 
-#               epsilon = 0.1)
-
 svmRTuned <- train(trainingData$x, trainingData$y,
                    method = "svmRadial",
                    preProc = c("center", "scale"),
                    tuneLength=14,
-                   trControl = trainControl(method="cv"))
-
+                   trControl = ctrl)
+# Output model
 svmRTuned
-
+# Output final model
 svmRTuned$finalModel
+# Plot tuned model
+# TODO: Remoe this plot, not good
+ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
 
-head(predict(svmRTuned, testData$x))
+#head(predict(svmRTuned, testData$x))
+
+# Make predictions on Test set
+svmPred <-predict(svmRTuned, newdata = testData$x)
+# Output prediction performance
+postResample(pred = svmPred, obs = testData$y)
+
+varImp(svmRTuned)
 ```
 
 
@@ -173,6 +197,9 @@ Exercise 6.3 describes data for a chemical manufacturing process. Use the same d
 ## Data Setup
 
 ```{r warning=F, message=F}
+# Reset seed from previous assignmwnt
+set.seed(8675309)
+
 # From Exercise 6.3
 data(ChemicalManufacturingProcess)
 cmp_data <- as.data.frame(ChemicalManufacturingProcess)
@@ -206,25 +233,110 @@ ctrl <- trainControl(method = "cv", number = 10)
 ## Model: Neural Networks
 
 ```{r warning=F, message=F}
+# The findCorrelation takes a correlation matrix and determines the
+# column numbers that should be removed to keep all pair-wise
+## correlations below a threshold
 
+training_data_minus_y <- subset(training_data, select=-c(Yield))
+
+tooHigh <- findCorrelation(cor(training_data_minus_y), cutoff=0.75)
+trainXnnet <- training_data[, -tooHigh]
+testXnnet <- test_data[, -tooHigh]
+
+ctrl <- trainControl(method = "cv", number = 10)
+
+# Create a specific candidate set of models to evaluate:
+nnetGrid <- expand.grid(decay = c(0, 0.01, .1),
+                        size = c(1:10),
+                        bag=FALSE)
+
+nnetTune <- train(Yield ~ .,
+                  data = trainXnnet,
+                  method="avNNet",
+                  tuneGrid=nnetGrid,
+                  trControl = ctrl,
+                  preProc = c("center", "scale"),
+                  linout=TRUE,
+                  trace=FALSE,
+                  MaxNWts = 10 * (ncol(trainXnnet) + 1) + 10 + 1,
+                  maxit=500)
+
+# Output tuned model
+nnetTune
+# TODO: Remove this plot; not helpful
+# Plot trained/tuned model
+ggplot(nnetTune) + labs(title="Neural Networks Model With Tuning")
+
+# Make predictions on Test set
+nnetPred <-predict(nnetTune, newdata = test_data)
+# Output prediction performance
+postResample(pred = nnetPred, obs = test_data$Yield)
 ```
 
 ## Model: MARS
 
 ```{r warning=F, message=F}
+# Tune MARS model
+# Define the candidate models to test
+marsGrid <- expand.grid(.degree = 1:2,
+                        .nprune = 2:38)
+# Fix the seed so that the results can be reproduced
+marsTuned <- train(Yield ~ ., 
+                   data = training_data,
+                   method = "earth",
+                   # Explicitly declare the candidate models to test
+                   tuneGrid = marsGrid,
+                   trControl = ctrl)
+# Output model
+marsTuned
+# Plot model
+ggplot(marsTuned) + labs(title="MARS Model With Tuning")
 
+# Make predictions on Test set
+marsPred <-predict(marsTuned, newdata = test_data)
+# Output prediction performance
+postResample(pred = marsPred, obs = test_data$Yield)
+
+# Variable importance of MARS model
+varImp(marsTuned)
 ```
 
 ## Model: SVM
 
 ```{r warning=F, message=F}
+svmRTuned <- train(Yield ~ .,
+                   data = training_data,
+                   method = "svmRadial",
+                   preProc = c("center", "scale"),
+                   tuneLength=14,
+                   trControl = ctrl)
+# Output model
+svmRTuned
+# Output final model
+svmRTuned$finalModel
+# Plot tuned model
+# TODO: Remoe this plot, not good
+ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
 
+# Make predictions on Test set
+svmPred <-predict(svmRTuned, newdata = test_data)
+# Output prediction performance
+postResample(pred = svmPred, obs = test_data$Yield)
 ```
 
 ## Model: KNN
 
 ```{r warning=F, message=F}
+knnModel <- train(Yield ~ .,
+                  data = training_data,
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trContorl = ctrl)
+knnModel
+ggplot(knnModel) + labs(title="KNN Model With Tuning")
 
+knnPred <-predict(knnModel, newdata = test_data)
+postResample(pred = knnPred, obs = test_data$Yield)
 ```
 
 ## Section a
@@ -254,10 +366,12 @@ Explore the relationships between the top predictors and the response for the pr
 
 #30#
 
+
+
+
 ## Neural networks
 
 ```{r warning=F, message=F, eval=F}
-library(nnet)
 nnetFit <- nnet(predictors, outcome,
                 size=5,
                 decay=0.01,
@@ -316,7 +430,6 @@ nnetTune <- train(solTrainXtrans, solTrainY,
 ## MARS
 
 ```{r warning=F, message=F, eval=F}
-library(earth)
 marsFit <- earth(solTrainXtrans, solTrainY)
 
 marsFit
@@ -341,7 +454,6 @@ varImp(marsTuned)
 ## Support Vector Machines
 
 ```{r warning=F, message=F, eval=F}
-library(kernlab)
 svmFit <- ksvm(x = solTrainXtrans, y = solTrainY,
                kernel = "rbfdot", kpar = "automatic",
                C = 1, epsilon = 0.1)
