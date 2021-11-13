@@ -14,21 +14,29 @@ library(caret)
 #library(pls)
 #library(elasticnet)
 #library(corrplot)
+library(earth)
+library(kernlab)
+
+# Set seed once for entire file
+set.seed(8675309)
 ```
 
 # Exercise 7.2
 
-Friedman (1991) introduced several benchmark data sets create by sim-ulation. One of these simulations used the following nonlinear equation to create data:
-$$y =10 sin(\pi x_1x_2) + 20(x_3 − 0.5)^2 +10x_4 +5x_5 +N(0,\sigma^2)$$
-where the $x$ values are random variables uniformly distributed between [0, 1] (there are also 5 other non-informative variables also created in the simula-tion). The package mlbench contains a function called `mlbench.friedman1` that simulates these data:
+Friedman (1991) introduced several benchmark data sets create by simulation. One of these simulations used the following nonlinear equation to create data:
+$$y = 10 sin(\pi x_1x_2) + 20(x_3 − 0.5)^2 +10x_4 +5x_5 +N(0,\sigma^2)$$
+where the $x$ values are random variables uniformly distributed between [0, 1] (there are also 5 other non-informative variables also created in the simulation). The package `mlbench` contains a function called `mlbench.friedman1` that simulates these data:
 
 ```{r warning=F, message=F}
 library(mlbench)
-set.seed(200)
-trainingData <-mlbench.friedman1(200, sd = 1)
+# n = number of patterns to create
+# sd = standard deviation of noise
+trainingData <- mlbench.friedman1(200, sd = 1)
+
 ## We convert the 'x' data from a matrix to a data frame
 ## One reason is that this will give the columns names.
-trainingData$x <-data.frame(trainingData$x)
+trainingData$x <- data.frame(trainingData$x)
+
 ## Look at the data using
 featurePlot(trainingData$x, trainingData$y)
 ## or other methods.
@@ -36,24 +44,29 @@ featurePlot(trainingData$x, trainingData$y)
 ## This creates a list with a vector 'y' and a matrix
 ## of predictors 'x'. Also simulate a large test set to
 ## estimate the true error rate with good precision:
-testData <-mlbench.friedman1(5000, sd = 1)
-testData$x <-data.frame(testData$x) 
+testData <- mlbench.friedman1(5000, sd = 1)
+testData$x <- data.frame(testData$x) 
 ```
 
 Tune several models on these data. For example:
 
+## K-Nearest Neighbors Model
+
 ```{r warning=F, message=F}
 library(caret)
-knnModel <-train(x = trainingData$x,
-                 y = trainingData$y,
-                 method = "knn",
-                 preProc = c("center", "scale"),
-                 tuneLength = 10)
+knnModel <- train(x = trainingData$x,
+                  y = trainingData$y,
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  tuneLength = 10)
 knnModel
+
+ggplot(knnModel) + labs(title="Knn Model With Tuning")
 ```
 
 ```{r warning=F, message=F}
 knnPred <-predict(knnModel, newdata = testData$x)
+
 ## The function 'postResample' can be used to get the test set
 ## perforamnce values
 postResample(pred = knnPred, obs = testData$y)
@@ -62,12 +75,157 @@ postResample(pred = knnPred, obs = testData$y)
 Which models appear to give the best performance? Does MARS select the informative predictors (those named `X1`–`X5`)?
 
 ```{r warning=F, message=F}
+# Outputing str and summary of data to understand the generated data
+# 200 observations of 10 variables
+# x is a dataframe of 10 variables X1:X10
+# y is a numeric value
+str(trainingData)
+summary(trainingData)
 
+# 5000 observations of 10 variables
+str(testData)
+summary(testData)
 ```
+
+# Neural Networks
+
+```{r warning=F, message=F}
+# The findCorrelation takes a correlation matrix and determines the
+# column numbers that should be removed to keep all pair-wise
+## correlations below a threshold
+tooHigh <- findCorrelation(cor(trainingData$x), cutoff=0.75)
+trainXnnet <- trainingData$x[, -tooHigh]
+testXnnet <- testData$x[, -tooHigh]
+
+ctrl <- trainControl(method = "cv", number = 10)
+
+# Create a specific candidate set of models to evaluate:
+nnetGrid <- expand.grid(decay = c(0, 0.01, .1),
+                        size = c(1:10),
+                        # The next option is to use bagging (see the
+                        # next chapter) instead of different random
+                        # seeds
+                        bag=FALSE)
+
+nnetTune <- train(trainingData$x, trainingData$y,
+                  method="avNNet",
+                  tuneGrid=nnetGrid,
+                  trControl = ctrl,
+                  ## Automatically standardize data prior to modeling
+                  # and prediction
+                  preProc = c("center", "scale"),
+                  linout=TRUE,
+                  trace=FALSE,
+                  MaxNWts = 10 * (ncol(trainXnnet) + 1) + 10 + 1,
+                  maxit=500)
+
+head(predict(nnetTune, testData$x))
+```
+
+## MARS
+
+```{r warning=F, message=F}
+# Tune MARS model
+# Define the candidate models to test
+marsGrid <- expand.grid(.degree = 1:2,
+                        .nprune = 2:38)
+# Fix the seed so that the results can be reproduced
+marsTuned <- train(trainingData$x, 
+                   trainingData$y,
+                   method = "earth",
+                   # Explicitly declare the candidate models to test
+                   tuneGrid = marsGrid,
+                   trControl = trainControl(method = "cv"))
+
+head(predict(marsTuned, testData$x))
+
+varImp(marsTuned)
+```
+
+## Support Vector Machines
+
+```{r warning=F, message=F}
+#svmFit <- ksvm(x = trainingData$x,
+#               y = trainingData$y,
+#               kernel = "rbfdot", 
+#               kpar = "automatic",
+#               C = 1, 
+#               epsilon = 0.1)
+
+svmRTuned <- train(trainingData$x, trainingData$y,
+                   method = "svmRadial",
+                   preProc = c("center", "scale"),
+                   tuneLength=14,
+                   trControl = trainControl(method="cv"))
+
+svmRTuned
+
+svmRTuned$finalModel
+
+head(predict(svmRTuned, testData$x))
+```
+
 
 # Exercise 7.5
 
 Exercise 6.3 describes data for a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several nonlinear regression models.
+
+## Data Setup
+
+```{r warning=F, message=F}
+# From Exercise 6.3
+data(ChemicalManufacturingProcess)
+cmp_data <- as.data.frame(ChemicalManufacturingProcess)
+
+# Let's try to impute using preprocess function
+# And make sure not to transform the 'Yield' column which is the result
+cmp_preprocess_data <- preProcess(cmp_data[, -c(1)], method="knnImpute")
+
+cmp_full_data <- predict(cmp_preprocess_data, cmp_data[, -c(1)])
+cmp_full_data$Yield <- cmp_data$Yield
+
+# Identify near zero variance columns for removal
+nzv_cols <- nearZeroVar(cmp_full_data)
+length(nzv_cols)
+# From: https://stackoverflow.com/questions/28043393/nearzerovar-function-in-caret
+if(length(nzv_cols) > 0) cmp_full_data <- cmp_full_data[, -nzv_cols]
+dim(cmp_full_data)
+
+trainingRows <- createDataPartition(cmp_full_data$Yield, p = .80, list=FALSE)
+
+# Training set
+training_data <- cmp_full_data[trainingRows, ]
+
+# Test set
+test_data <- cmp_full_data[-trainingRows, ]
+
+# Based on book example
+ctrl <- trainControl(method = "cv", number = 10)
+```
+
+## Model: Neural Networks
+
+```{r warning=F, message=F}
+
+```
+
+## Model: MARS
+
+```{r warning=F, message=F}
+
+```
+
+## Model: SVM
+
+```{r warning=F, message=F}
+
+```
+
+## Model: KNN
+
+```{r warning=F, message=F}
+
+```
 
 ## Section a
 
@@ -79,7 +237,7 @@ Which nonlinear regression model gives the optimal re-sampling and test set perf
 
 ## Section b
 
-Which predictors are most important in the optimal nonlinear regres-sion model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?
+Which predictors are most important in the optimal nonlinear regression model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?
 
 ```{r warning=F, message=F}
 
@@ -96,6 +254,123 @@ Explore the relationships between the top predictors and the response for the pr
 
 #30#
 
+## Neural networks
+
+```{r warning=F, message=F, eval=F}
+library(nnet)
+nnetFit <- nnet(predictors, outcome,
+                size=5,
+                decay=0.01,
+                linout=TRUE,
+                ## Reduce the number of iterations to find
+                ## parameter estimates
+                maxit=500,
+                ## and the number of parameters used by the model
+                MaxNWts= 5 * (ncol(predictors) + 1) + 5 + 1)
+
+nnetAvg <- avNNet(predictors, outcome,
+                  size=5,
+                  decay=0.01,
+                  ## specify how many models to average
+                  repeats=5,
+                  linout=TRUE,
+                  ## Reduce the amount of printed output
+                  trace=FALSE,
+                  ## Expand the number of iterations to find
+                  ## parameter estimates
+                  maxit=500,
+                  ## and the number of parameters used by the model
+                  MaxNWts = 5 * (ncol(predictors) + 1) +5 + 1)
+
+predict(nnetFit, newData)
+## or
+predict(nnetAvg, newData)
+
+# The findCorrelation takes a correlation matrix and determines the
+# column numbers that should be removed to keep all pair-wise
+## correlations below a threshold
+tooHigh <- findCorrelation(cor(solTrainXtrans), cutoff=0.75)
+trainXnnet <- solTrainXtrans[, -tooHigh]
+testXnnet <- solTestXtrans[, -tooHigh]
+# Create a specific candidate set of models to evaluate:
+nnetGrid <- expand.grid(.decary = c(0, 0.01, .1),
+                        .size = c(1:10),
+                        # The next option is to use bagging (see the
+                        # next chapter) instead of different random
+                        # seeds
+                        .bag=FALSE)
+
+nnetTune <- train(solTrainXtrans, solTrainY,
+                  method="avNNet",
+                  tuneGrid=nnetGrid,
+                  trControl = ctrl,
+                  ## Automatically standardize data prior to modeling
+                  # and prediction
+                  preProc = c("center", "scale"),
+                  linout=TRUE,
+                  trace=FALSE,
+                  MaxNWts = 10 * (ncol(trainXnnet) + 1) + 10 + 1,
+                  maxit=500)
+```
+
+## MARS
+
+```{r warning=F, message=F, eval=F}
+library(earth)
+marsFit <- earth(solTrainXtrans, solTrainY)
+
+marsFit
+
+summary(marsFit)
+
+# Define the candidate models to test
+marsGrid <- expand.grid(.degree = 1:2,
+                        .nprune = 2:38)
+
+marsTuned <- train(solTrainXtrans, solTrainY,
+                   method = "earth",
+                   # Explicitly declare the candidate models to test
+                   tuneGrid = marsGrid,
+                   trControl = trainControl(method = "cv"))
+
+head(predict(marsTuned, solTestXtrans))
+
+varImp(marsTuned)
+```
+
+## Support Vector Machines
+
+```{r warning=F, message=F, eval=F}
+library(kernlab)
+svmFit <- ksvm(x = solTrainXtrans, y = solTrainY,
+               kernel = "rbfdot", kpar = "automatic",
+               C = 1, epsilon = 0.1)
+
+svmRTuned <- train(solTrainXtrans, solTrainY,
+                   method = "svmRadial",
+                   preProc = c("center", "scale"),
+                   tuneLength=14,
+                   trControl = trainControl(method="cv"))
+
+svmRTuned
+
+svmRTuned$finalModel
+```
+
+## K-Nearest Neighbors
+
+```{r warning=F, message=F, eval=F}
+# Remove a few sparse and unbalanced fingerprints first
+knnDescr <- solTrainXtrans[, -nearZeroVar(solTrainXtrans)]
+
+knnTune <- train(knnDescr,
+                 solTrainY,
+                 method = "knn",
+                 # Center and scaling will occur for new predictions too
+                 preProc = c("center", "scale"),
+                 tuneGrid = data.frame(.k = 1:20),
+                 trControl = trainControl(method = "cv"))
+```
 
 
 
