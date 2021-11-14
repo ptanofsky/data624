@@ -199,7 +199,7 @@ Exercise 6.3 describes data for a chemical manufacturing process. Use the same d
 
 ## Data Setup
 
-The data setup below is appropriately borrowed from my work in the previoius assignment. The `set.seed` function is reset to match the value from before.
+The data setup below is appropriately borrowed from my work in the previous assignment. The `set.seed` function is reset to match the value from before.
 
 ```{r warning=F, message=F}
 # Reset seed from previous assignment
@@ -363,7 +363,7 @@ knn_var_imp <- varImp(knnModel_cmp)
 knn_var_imp
 ```
 
-**Result:** The kNN model results in RMSE of 1.4025385and $R^2$ of 0.5479653 on the test set. A better $R^2$ compared to the Neural Networks model, but underperformed compared to the MARS model and SVM model.
+**Result:** The kNN model results in RMSE of 1.4025385and $R^2$ of 0.5479653 on the test set. A better $R^2$ compared to the Neural Networks model, but under-performed compared to the MARS model and SVM model.
 
 ## Section a
 
@@ -410,25 +410,38 @@ top_vars <- c("BiologicalMaterial06",
               "ManufacturingProcess25",
               "ManufacturingProcess18")
 
-data_for_plot <- cmp_full_data[,top_vars] %>%
+featurePlot(cmp_full_data[,top_vars], cmp_full_data$Yield)
+```
+
+The above plot shows some outliers in the manufacturing variables which make it quite difficult to evaluate the variable plots. I will remove the outliers with the goal of improving the plots for readability.
+
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+top_vars_and_yield <- c(top_vars, "Yield")
+#dim(cmp_full_data[,top_vars_and_yield])
+
+data_for_plot <- cmp_full_data[,top_vars_and_yield] %>%
   filter(ManufacturingProcess31 > -5 & ManufacturingProcess29 > -5 &
            ManufacturingProcess30 > -5 & ManufacturingProcess25 > -5 &
            ManufacturingProcess18 > -5)
 
-featurePlot(data_for_plot, cmp_full_data$Yield)
+# Appear to have removed 2 rows if '> -5' and 7 rows removed if '> -1.5'
+#dim(data_for_plot)
 
-  
+featurePlot(data_for_plot[,top_vars], data_for_plot$Yield)
+```
 
-###
+Turns out 2 observations were excluded to remove the extreme outliers from the manufacturing variables. The biological variables appear to have a distinct positive linear relationship with the `Yield` predictor variable.
 
-vars <- c(top_vars, "Yield")
+**Answer:** By removing the outliers from the plots of the manufacturing variables, we see the manufacturing variables do not have a clear linear relationship with the predictor variable `Yield`. The visual evaluation of the two sets of feature plots supports the argument for the value of the SVM model as applied to the chemical manufacturing process data. The SVM model uses a "framework of robust regression in order to minimize the effect of outliers on the regression equations," according to the textbook. As the textbook also indicates, "when data may contain influential observations, an alternative minimization metric that is less sensitive ... can be used to find the best parameter estimates."
 
+So when considering the optimal nonlinear regression model, the SVM model outperforms the best linear regression model through identification of several important predictors containing outliers otherwise dismissed by the linear regression model. The underlying algorithm of the SVM model performs exactly as it should by minimizing the effect of the outliers. Yes, the optimal linear and nonlinear regression models share many important variables, but the SVM model does identify several unique variables with high importance by minimizing the effect of the extreme outliers.
+
+```{r warning=F, message=F, fig.width=12, fig.height=10}
 corr <- cmp_full_data %>% 
-  select(vars) %>% cor()
+  select(top_vars_and_yield) %>% cor()
 
 corrplot(corr, method="number")
 ```
 
-#30#
-
+The numeric correlation plot above does not provide much more insight than already identified by the feature plots. Unsurprisingly, the 3 biological variables are highly correlated with each other and generally the manufacturing variables are highly correlated with each other.
 
