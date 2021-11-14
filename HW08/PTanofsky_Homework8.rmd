@@ -74,7 +74,7 @@ postResample(pred = knnPred, obs = testData$y)
 
 **Which models appear to give the best performance? Does MARS select the informative predictors (those named `X1`–`X5`)?**
 
-The above output of the kNN model from the book text results in an RMSE of 3.2040595 and $R^2$ of 0.6819919. Based on Professor Nieman's recommendation of a good modeling landing in the range of 0.7 to 0.85, this model is almost good. The top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
+The above output of the kNN model from the book text results in an RMSE of 3.2040595 and $R^2$ of 0.6819919. The top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
 
 Let's see if I can do better with the other model approaches from the textbook.
 
@@ -158,7 +158,7 @@ postResample(pred = marsPred, obs = testData$y)
 varImp(marsTuned)
 ```
 
-**Result:** The MARS model results in an RMSE of 1.2803060 and $R^2$ of 0.9335241 on the test data. Quite an improvement in the $R^2$ compared to the initial kNN model and the neural networks model.
+**Result:** The MARS model results in an RMSE of 1.2803060 and $R^2$ of 0.9335241 on the test data. Quite an improvement in the $R^2$ compared to the initial kNN model and the Neural Networks model.
 
 To answer the textbook question ... yes, the MARS model does select the informative predictors (those named `X1`–`X5`). That being said, the variable `X3` provides an overall importance of 0.0.
 
@@ -191,7 +191,7 @@ varImp(svmRTuned)
 
 **Result:** The Support Vector Machines model results in an RMSE of 2.0693470 and $R^2$ of 0.8263551 on the test set. Certainly an improvement in the $R^2$ compared to the initial kNN model and neural networks but not quite as good as the MARS model on the test set. Again, the top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
 
-Overall, the best performing model on the test set is the MARS model with quite impressive $R^2$ of 0.9335241 on the test data. This result indicates the model is able to account for over 93% of the variance in the test data set. Then again, this data is simulated using the same approach for both the training and the test data, so it shouldn't be too surprising that the models do perform well on the data. I believe that by increasing the count of observations in the test set, the evaluation of the models is fair to gauge overall performance.
+Overall, the best performing model on the test set is the MARS model with a quite impressive $R^2$ of 0.9335241 on the test data. This result indicates the model is able to account for over 93% of the variance in the test data set. Then again, this data is simulated using the same approach for both the training and the test data, so it shouldn't be too surprising that the models do perform well on the data. I believe that by increasing the count of observations in the test set, the evaluation of the models is fair to gauge overall performance.
 
 # Exercise 7.5
 
@@ -199,7 +199,7 @@ Exercise 6.3 describes data for a chemical manufacturing process. Use the same d
 
 ## Data Setup
 
-The data setup below is appropriately borrowed from my work in the previous assignment. The `set.seed` function is reset to match the value from before.
+The data setup below is appropriately borrowed from my work in the previous assignment. The `set.seed` function is reset to match the value from the previous assignment
 
 ```{r warning=F, message=F}
 # Reset seed from previous assignment
@@ -235,7 +235,7 @@ test_data <- cmp_full_data[-trainingRows, ]
 ctrl <- trainControl(method = "cv", number = 10)
 ```
 
-With the goal of assessing, the nonlinear regression models on the chemical manufacturing process data, I have fit models of type neural networks, MARS, SVM, and kNN, as I did in the first exercise of this assignment.
+With the goal of assessing the nonlinear regression models on the chemical manufacturing process data, I have fit models of type neural networks, MARS, SVM, and kNN, as I did in the first exercise of this assignment.
 
 ## Model: Neural Networks
 
@@ -363,7 +363,7 @@ knn_var_imp <- varImp(knnModel_cmp)
 knn_var_imp
 ```
 
-**Result:** The kNN model results in RMSE of 1.4025385and $R^2$ of 0.5479653 on the test set. A better $R^2$ compared to the Neural Networks model, but under-performed compared to the MARS model and SVM model.
+**Result:** The kNN model results in RMSE of 1.4025385 and $R^2$ of 0.5479653 on the test set. A better $R^2$ compared to the Neural Networks model, but under-performed compared to the MARS model and SVM model.
 
 ## Section a
 
