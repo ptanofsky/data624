@@ -10,13 +10,12 @@ output: html_document
 # Import required R libraries
 library(AppliedPredictiveModeling)
 library(caret)
-#library(tidyverse)
-#library(pls)
-#library(elasticnet)
-#library(corrplot)
+library(tidyverse)
+library(corrplot)
 library(earth)
 library(kernlab)
 library(mlbench)
+library(kableExtra)
 
 # Set seed once for entire file
 set.seed(200)
@@ -60,7 +59,7 @@ knnModel <- train(x = trainingData$x,
                   tuneLength = 10)
 knnModel
 
-ggplot(knnModel) + labs(title="Knn Model With Tuning")
+ggplot(knnModel) + labs(title="nNN Model With Tuning")
 
 varImp(knnModel)
 ```
@@ -69,36 +68,31 @@ varImp(knnModel)
 knnPred <-predict(knnModel, newdata = testData$x)
 
 ## The function 'postResample' can be used to get the test set
-## perforamnce values
+## performance values
 postResample(pred = knnPred, obs = testData$y)
 ```
 
-Which models appear to give the best performance? Does MARS select the informative predictors (those named `X1`–`X5`)?
+**Which models appear to give the best performance? Does MARS select the informative predictors (those named `X1`–`X5`)?**
 
-```{r warning=F, message=F}
-# Outputing str and summary of data to understand the generated data
-# 200 observations of 10 variables
-# x is a dataframe of 10 variables X1:X10
-# y is a numeric value
-#str(trainingData)
-#summary(trainingData)
+The above output of the kNN model from the book text results in an RMSE of 3.2040595 and $R^2$ of 0.6819919. Based on Professor Nieman's recommendation of a good modeling landing in the range of 0.7 to 0.85, this model is almost good. The top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
 
-# 5000 observations of 10 variables
-#str(testData)
-#summary(testData)
-```
+Let's see if I can do better with the other model approaches from the textbook.
 
 # Neural Networks
 
 ```{r warning=F, message=F}
 # The findCorrelation takes a correlation matrix and determines the
 # column numbers that should be removed to keep all pair-wise
-## correlations below a threshold
+# correlations below a threshold
 tooHigh <- findCorrelation(cor(trainingData$x), cutoff=0.75)
+#trainXnnet <- trainingData$x[, -tooHigh]
+#testXnnet <- testData$x[, -tooHigh]
 tooHigh
-trainXnnet <- trainingData$x[, -tooHigh]
-testXnnet <- testData$x[, -tooHigh]
+```
 
+The `findCorrelation` function results in no column numbers to be removed.
+
+```{r warning=F, message=F}
 ctrl <- trainControl(method = "cv", number = 10)
 
 # Create a specific candidate set of models to evaluate:
@@ -123,7 +117,6 @@ nnetTune <- train(trainingData$x, trainingData$y,
 
 # Output tuned model
 nnetTune
-# TODO: Remove this plot; not helpful
 # Plot trained/tuned model
 ggplot(nnetTune) + labs(title="Neural Networks Model With Tuning")
 
@@ -135,6 +128,8 @@ postResample(pred = nnetPred, obs = testData$y)
 varImp(nnetTune)
 ```
 
+**Result:** The Neural Networks model results in an RMSE of 2.4788220 and $R^2$ of 0.7870229. Certainly an improvement in the $R^2$ compared to the initial kNN model. Again, the top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
+
 ## MARS
 
 ```{r warning=F, message=F}
@@ -142,11 +137,11 @@ varImp(nnetTune)
 # Define the candidate models to test
 marsGrid <- expand.grid(.degree = 1:2,
                         .nprune = 2:38)
+
 # Fix the seed so that the results can be reproduced
 marsTuned <- train(trainingData$x, 
                    trainingData$y,
                    method = "earth",
-                   # Explicitly declare the candidate models to test
                    tuneGrid = marsGrid,
                    trControl = ctrl)
 # Output model
@@ -163,6 +158,11 @@ postResample(pred = marsPred, obs = testData$y)
 varImp(marsTuned)
 ```
 
+**Result:** The MARS model results in an RMSE of 1.2803060 and $R^2$ of 0.9335241 on the test data. Quite an improvement in the $R^2$ compared to the initial kNN model and the neural networks model.
+
+To answer the textbook question ... yes, the MARS model does select the informative predictors (those named `X1`–`X5`). That being said, the variable `X3` provides an overall importance of 0.0.
+
+
 ## Support Vector Machines
 
 ```{r warning=F, message=F}
@@ -175,9 +175,9 @@ svmRTuned <- train(trainingData$x, trainingData$y,
 svmRTuned
 # Output final model
 svmRTuned$finalModel
-# Plot tuned model
-# TODO: Remoe this plot, not good
-ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
+
+# Plot of SVM model not valuable
+#ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
 
 #head(predict(svmRTuned, testData$x))
 
@@ -189,6 +189,9 @@ postResample(pred = svmPred, obs = testData$y)
 varImp(svmRTuned)
 ```
 
+**Result:** The Support Vector Machines model results in an RMSE of 2.0693470 and $R^2$ of 0.8263551 on the test set. Certainly an improvement in the $R^2$ compared to the initial kNN model and neural networks but not quite as good as the MARS model on the test set. Again, the top 5 predictor variables of importance are `X1` - `X5`, not in that order though.
+
+Overall, the best performing model on the test set is the MARS model with quite impressive $R^2$ of 0.9335241 on the test data. This result indicates the model is able to account for over 93% of the variance in the test data set. Then again, this data is simulated using the same approach for both the training and the test data, so it shouldn't be too surprising that the models do perform well on the data. I believe that by increasing the count of observations in the test set, the evaluation of the models is fair to gauge overall performance.
 
 # Exercise 7.5
 
@@ -196,9 +199,11 @@ Exercise 6.3 describes data for a chemical manufacturing process. Use the same d
 
 ## Data Setup
 
+The data setup below is appropriately borrowed from my work in the previoius assignment. The `set.seed` function is reset to match the value from before.
+
 ```{r warning=F, message=F}
-# Reset seed from previous assignmwnt
-set.seed(8675309)
+# Reset seed from previous assignment
+set.seed(8675309) # Jenny, I got your number
 
 # From Exercise 6.3
 data(ChemicalManufacturingProcess)
@@ -230,13 +235,14 @@ test_data <- cmp_full_data[-trainingRows, ]
 ctrl <- trainControl(method = "cv", number = 10)
 ```
 
+With the goal of assessing, the nonlinear regression models on the chemical manufacturing process data, I have fit models of type neural networks, MARS, SVM, and kNN, as I did in the first exercise of this assignment.
+
 ## Model: Neural Networks
 
 ```{r warning=F, message=F}
 # The findCorrelation takes a correlation matrix and determines the
 # column numbers that should be removed to keep all pair-wise
 ## correlations below a threshold
-
 training_data_minus_y <- subset(training_data, select=-c(Yield))
 
 tooHigh <- findCorrelation(cor(training_data_minus_y), cutoff=0.75)
@@ -250,7 +256,7 @@ nnetGrid <- expand.grid(decay = c(0, 0.01, .1),
                         size = c(1:10),
                         bag=FALSE)
 
-nnetTune <- train(Yield ~ .,
+nnetTune_cmp <- train(Yield ~ .,
                   data = trainXnnet,
                   method="avNNet",
                   tuneGrid=nnetGrid,
@@ -262,16 +268,21 @@ nnetTune <- train(Yield ~ .,
                   maxit=500)
 
 # Output tuned model
-nnetTune
-# TODO: Remove this plot; not helpful
+nnetTune_cmp
 # Plot trained/tuned model
-ggplot(nnetTune) + labs(title="Neural Networks Model With Tuning")
+ggplot(nnetTune_cmp) + labs(title="Neural Networks Model With Tuning")
 
 # Make predictions on Test set
-nnetPred <-predict(nnetTune, newdata = test_data)
+nnetPred <-predict(nnetTune_cmp, newdata = test_data)
 # Output prediction performance
-postResample(pred = nnetPred, obs = test_data$Yield)
+nnet_test_perf <- postResample(pred = nnetPred, obs = test_data$Yield)
+nnet_test_perf
+
+nnet_var_imp <- varImp(nnetTune_cmp)
+nnet_var_imp
 ```
+
+**Result:** The Neural Networks model results in RMSE of 1.6747770 and $R^2$ of 0.2824588 on the test set. First reaction, not a good $R^2$ value at all.
 
 ## Model: MARS
 
@@ -281,223 +292,143 @@ postResample(pred = nnetPred, obs = test_data$Yield)
 marsGrid <- expand.grid(.degree = 1:2,
                         .nprune = 2:38)
 # Fix the seed so that the results can be reproduced
-marsTuned <- train(Yield ~ ., 
+marsTuned_cmp <- train(Yield ~ ., 
                    data = training_data,
                    method = "earth",
                    # Explicitly declare the candidate models to test
                    tuneGrid = marsGrid,
                    trControl = ctrl)
 # Output model
-marsTuned
+marsTuned_cmp
 # Plot model
-ggplot(marsTuned) + labs(title="MARS Model With Tuning")
+ggplot(marsTuned_cmp) + labs(title="MARS Model With Tuning")
 
 # Make predictions on Test set
-marsPred <-predict(marsTuned, newdata = test_data)
+marsPred <-predict(marsTuned_cmp, newdata = test_data)
 # Output prediction performance
-postResample(pred = marsPred, obs = test_data$Yield)
+mars_test_perf <- postResample(pred = marsPred, obs = test_data$Yield)
+mars_test_perf
 
 # Variable importance of MARS model
-varImp(marsTuned)
+mars_var_imp <- varImp(marsTuned_cmp)
+mars_var_imp
 ```
+
+**Result:** The MARS model results in RMSE of 1.2057906 and $R^2$ of 0.6232327 on the test set. Clearly, a much better $R^2$ compared to the Neural Networks model.
 
 ## Model: SVM
 
 ```{r warning=F, message=F}
-svmRTuned <- train(Yield ~ .,
+svmRTuned_cmp <- train(Yield ~ .,
                    data = training_data,
                    method = "svmRadial",
                    preProc = c("center", "scale"),
                    tuneLength=14,
                    trControl = ctrl)
 # Output model
-svmRTuned
+svmRTuned_cmp
 # Output final model
-svmRTuned$finalModel
-# Plot tuned model
-# TODO: Remoe this plot, not good
-ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
+svmRTuned_cmp$finalModel
+# Again, no need to plot SVM model
+# ggplot(svmRTuned) + labs(title="SVM Model With Tuning")
 
 # Make predictions on Test set
-svmPred <-predict(svmRTuned, newdata = test_data)
+svmPred <-predict(svmRTuned_cmp, newdata = test_data)
 # Output prediction performance
-postResample(pred = svmPred, obs = test_data$Yield)
+svm_test_perf <- postResample(pred = svmPred, obs = test_data$Yield)
+svm_test_perf
+
+svm_var_imp <- varImp(svmRTuned_cmp)
+svm_var_imp
 ```
 
-## Model: KNN
+**Result:** The SVM model results in RMSE of 1.2001067 and $R^2$ of 0.6453839 on the test set. A much better $R^2$ compared to the Neural Networks model, and even a small improvement over the MARS model.
+
+## Model: kNN
 
 ```{r warning=F, message=F}
-knnModel <- train(Yield ~ .,
+knnModel_cmp <- train(Yield ~ .,
                   data = training_data,
                   method = "knn",
                   preProc = c("center", "scale"),
                   trContorl = ctrl)
-knnModel
-ggplot(knnModel) + labs(title="KNN Model With Tuning")
+knnModel_cmp
+ggplot(knnModel_cmp) + labs(title="kNN Model With Tuning")
 
-knnPred <-predict(knnModel, newdata = test_data)
-postResample(pred = knnPred, obs = test_data$Yield)
+knnPred <-predict(knnModel_cmp, newdata = test_data)
+knn_test_perf <- postResample(pred = knnPred, obs = test_data$Yield)
+knn_test_perf
+
+knn_var_imp <- varImp(knnModel_cmp)
+knn_var_imp
 ```
+
+**Result:** The kNN model results in RMSE of 1.4025385and $R^2$ of 0.5479653 on the test set. A better $R^2$ compared to the Neural Networks model, but underperformed compared to the MARS model and SVM model.
 
 ## Section a
 
 Which nonlinear regression model gives the optimal re-sampling and test set performance?
 
 ```{r warning=F, message=F}
+perf_results <- data.frame(NNet=nnet_test_perf, MARS=mars_test_perf, SVM=svm_test_perf, kNN=knn_test_perf)
 
+perf_results %>% t() %>% kable(caption="Comparison of Model Performance", digits=4) %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
 ```
+
+**Answer:** As the above table indicates, the SVM model attained the lowest RMSE and the highest $R^2$.
 
 ## Section b
 
 Which predictors are most important in the optimal nonlinear regression model? Do either the biological or process variables dominate the list? How do the top ten important predictors compare to the top ten predictors from the optimal linear model?
 
 ```{r warning=F, message=F}
-
+svm_var_imp
 ```
+
+**Answer:** From the SVM model, the optimal nonlinear regression model, the top 20 most important predictors resulted in 13 manufacturing process variables and 7 biological material variables as seen above.
+
+Overall, I believe the manufacturing variables provide more importance than the biological variables in the nonlinear regression model, but I don't believe the manufacturing variables dominate in the same way they did in the linear regression model.
+
+Compared to the results from the linear regression model, the nonlinear regression model for SVM results in two biological variables in the top 10, BiologicalMaterial06 in 2nd and BiologicalMaterial03 in 6th. Also, 4 of the biological variables scored above 53.9%, which was the highest score of a biological predictor from the linear model. These results support the assessment that the manufacturing variables don't dominate the model as much in the nonlinear model as previously seen in the linear model.
+
+Looking at the top 10 lists of the optimal nonlinear and linear models, the top 6 manufacturing predictors from the linear model are also in the top 10 of the SVM nonlinear model. But, interestingly, the 3 biological predictors in the top 10 of the non-linear model are not in the top 10 of the linear model, so the biological predictors don't behave the same between the optimal linear and nonlinear models.
 
 ## Section c
 
 Explore the relationships between the top predictors and the response for the predictors that are unique to the optimal nonlinear regression model. Do these plots reveal intuition about the biological or process predictors and their relationship with yield?
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+# From the identified predictors unique to the nonlinear regression model.
 
+top_vars <- c("BiologicalMaterial06",
+              "BiologicalMaterial03",
+              "BiologicalMaterial12",
+              "ManufacturingProcess31",
+              "ManufacturingProcess29",
+              "ManufacturingProcess30",
+              "ManufacturingProcess25",
+              "ManufacturingProcess18")
+
+data_for_plot <- cmp_full_data[,top_vars] %>%
+  filter(ManufacturingProcess31 > -5 & ManufacturingProcess29 > -5 &
+           ManufacturingProcess30 > -5 & ManufacturingProcess25 > -5 &
+           ManufacturingProcess18 > -5)
+
+featurePlot(data_for_plot, cmp_full_data$Yield)
+
+  
+
+###
+
+vars <- c(top_vars, "Yield")
+
+corr <- cmp_full_data %>% 
+  select(vars) %>% cor()
+
+corrplot(corr, method="number")
 ```
-
 
 #30#
 
 
-
-
-## Neural networks
-
-```{r warning=F, message=F, eval=F}
-nnetFit <- nnet(predictors, outcome,
-                size=5,
-                decay=0.01,
-                linout=TRUE,
-                ## Reduce the number of iterations to find
-                ## parameter estimates
-                maxit=500,
-                ## and the number of parameters used by the model
-                MaxNWts= 5 * (ncol(predictors) + 1) + 5 + 1)
-
-nnetAvg <- avNNet(predictors, outcome,
-                  size=5,
-                  decay=0.01,
-                  ## specify how many models to average
-                  repeats=5,
-                  linout=TRUE,
-                  ## Reduce the amount of printed output
-                  trace=FALSE,
-                  ## Expand the number of iterations to find
-                  ## parameter estimates
-                  maxit=500,
-                  ## and the number of parameters used by the model
-                  MaxNWts = 5 * (ncol(predictors) + 1) +5 + 1)
-
-predict(nnetFit, newData)
-## or
-predict(nnetAvg, newData)
-
-# The findCorrelation takes a correlation matrix and determines the
-# column numbers that should be removed to keep all pair-wise
-## correlations below a threshold
-tooHigh <- findCorrelation(cor(solTrainXtrans), cutoff=0.75)
-trainXnnet <- solTrainXtrans[, -tooHigh]
-testXnnet <- solTestXtrans[, -tooHigh]
-# Create a specific candidate set of models to evaluate:
-nnetGrid <- expand.grid(.decary = c(0, 0.01, .1),
-                        .size = c(1:10),
-                        # The next option is to use bagging (see the
-                        # next chapter) instead of different random
-                        # seeds
-                        .bag=FALSE)
-
-nnetTune <- train(solTrainXtrans, solTrainY,
-                  method="avNNet",
-                  tuneGrid=nnetGrid,
-                  trControl = ctrl,
-                  ## Automatically standardize data prior to modeling
-                  # and prediction
-                  preProc = c("center", "scale"),
-                  linout=TRUE,
-                  trace=FALSE,
-                  MaxNWts = 10 * (ncol(trainXnnet) + 1) + 10 + 1,
-                  maxit=500)
-```
-
-## MARS
-
-```{r warning=F, message=F, eval=F}
-marsFit <- earth(solTrainXtrans, solTrainY)
-
-marsFit
-
-summary(marsFit)
-
-# Define the candidate models to test
-marsGrid <- expand.grid(.degree = 1:2,
-                        .nprune = 2:38)
-
-marsTuned <- train(solTrainXtrans, solTrainY,
-                   method = "earth",
-                   # Explicitly declare the candidate models to test
-                   tuneGrid = marsGrid,
-                   trControl = trainControl(method = "cv"))
-
-head(predict(marsTuned, solTestXtrans))
-
-varImp(marsTuned)
-```
-
-## Support Vector Machines
-
-```{r warning=F, message=F, eval=F}
-svmFit <- ksvm(x = solTrainXtrans, y = solTrainY,
-               kernel = "rbfdot", kpar = "automatic",
-               C = 1, epsilon = 0.1)
-
-svmRTuned <- train(solTrainXtrans, solTrainY,
-                   method = "svmRadial",
-                   preProc = c("center", "scale"),
-                   tuneLength=14,
-                   trControl = trainControl(method="cv"))
-
-svmRTuned
-
-svmRTuned$finalModel
-```
-
-## K-Nearest Neighbors
-
-```{r warning=F, message=F, eval=F}
-# Remove a few sparse and unbalanced fingerprints first
-knnDescr <- solTrainXtrans[, -nearZeroVar(solTrainXtrans)]
-
-knnTune <- train(knnDescr,
-                 solTrainY,
-                 method = "knn",
-                 # Center and scaling will occur for new predictions too
-                 preProc = c("center", "scale"),
-                 tuneGrid = data.frame(.k = 1:20),
-                 trControl = trainControl(method = "cv"))
-```
-
-
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
