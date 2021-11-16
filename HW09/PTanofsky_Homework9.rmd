@@ -9,11 +9,21 @@ output: html_document
 ```{r warning=F, message=F}
 # Import required R libraries
 library(AppliedPredictiveModeling)
-#library(caret)
-#library(tidyverse)
+library(tidyverse)
 #library(pls)
 #library(elasticnet)
 #library(corrplot)
+
+# libraries for Chapter 8
+library(caret)
+library(Cubist)
+library(gbm)
+library(ipred)
+library(party)
+library(partykit)
+library(randomForest)
+library(rpart)
+library(RWeka)
 ```
 
 
@@ -28,6 +38,8 @@ simulated <-mlbench.friedman1(200, sd = 1)
 simulated <-cbind(simulated$x, simulated$y)
 simulated <-as.data.frame(simulated)
 colnames(simulated)[ncol(simulated)] <-"y"
+
+simulated
 ```
 
 ## Section a
@@ -35,15 +47,17 @@ colnames(simulated)[ncol(simulated)] <-"y"
 Fit a random forest model to all of the predictors, then estimate the variable importance scores:
 
 ```{r warning=F, message=F}
-library(randomForest)
-library(caret)
 model1 <-randomForest(y ~ ., data = simulated,
                       importance = TRUE,
                       ntree = 1000)
 rfImp1 <-varImp(model1, scale = FALSE)
+
+rfImp1
 ```
 
 Did the random forest model significantly use the uninformative predictors (V6 – V10)?
+
+**Answer:** XXX
 
 ## Section b
 
@@ -56,6 +70,8 @@ cor(simulated$duplicate1, simulated$V1)
 
 Fit another random forest model to these data. Did the importance score for `V1` change? What happens when you add another predictor that is also highly correlated with `V1`?
 
+**Answer:** XXX
+
 ## Section c
 
 Use the `cforest` function in the `party` package to fit a random forest model using conditional inference trees. The `party` package function `varimp` can calculate predictor importance. The `conditional` argument of that function toggles between the traditional importance measure and the modified version described in Strobl et al. (2007). Do these importances show the same pattern as the traditional random forest model?
@@ -64,6 +80,8 @@ Use the `cforest` function in the `party` package to fit a random forest model u
 
 ```
 
+**Answer:** XXX
+
 ## Section d
 
 Repeat this process with different tree models, such as boosted trees and Cubist. Does the same pattern occur?
@@ -71,6 +89,8 @@ Repeat this process with different tree models, such as boosted trees and Cubist
 ```{r warning=F, message=F}
 
 ```
+
+**Answer:** XXX
 
 # Exercise 8.2
 
@@ -116,8 +136,39 @@ How would increasing interaction depth affect the slope of predictor importance 
 
 Refer to Exercises 6.3 and 7.5 which describe a chemical manufacturing process. Use the same data imputation, data splitting, and pre-processing steps as before and train several tree-based models:
 
-```{r warning=F, message=F}
+## Data Setup
 
+The data setup below is appropriately borrowed from my work in the previous assignment. The `set.seed` function is reset to match the value from the previous assignment
+
+```{r warning=F, message=F}
+# Reset seed from previous assignment
+set.seed(8675309) # Jenny, I got your number
+
+# From Exercise 6.3
+data(ChemicalManufacturingProcess)
+cmp_data <- as.data.frame(ChemicalManufacturingProcess)
+
+# Let's try to impute using preprocess function
+# And make sure not to transform the 'Yield' column which is the result
+cmp_preprocess_data <- preProcess(cmp_data[, -c(1)], method="knnImpute")
+
+cmp_full_data <- predict(cmp_preprocess_data, cmp_data[, -c(1)])
+cmp_full_data$Yield <- cmp_data$Yield
+
+# Identify near zero variance columns for removal
+nzv_cols <- nearZeroVar(cmp_full_data)
+length(nzv_cols)
+# From: https://stackoverflow.com/questions/28043393/nearzerovar-function-in-caret
+if(length(nzv_cols) > 0) cmp_full_data <- cmp_full_data[, -nzv_cols]
+dim(cmp_full_data)
+
+trainingRows <- createDataPartition(cmp_full_data$Yield, p = .80, list=FALSE)
+
+# Training set
+training_data <- cmp_full_data[trainingRows, ]
+
+# Test set
+test_data <- cmp_full_data[-trainingRows, ]
 ```
 
 ## Section a
@@ -148,8 +199,108 @@ Plot the optimal single tree with the distribution of yield in the terminal node
 
 #30#
 
+# Computing section
 
 
+
+```{r warning=F, message=F}
+
+```
+
+# Single Tree
+
+```{r warning=F, message=F}
+rpartTree <- rparty(y ~ ., data=trainData)
+# or
+ctreeTree <- ctree(y ~ ., data=trainData)
+
+#===== Train model
+set.seed(100)
+rpartTune <- train(solTrainXtrans, solTrainY,
+                   method = "rpart2",
+                   tuneLength = 10,
+                   trControl = trainControl(method = "cv"))
+
+plot(treeObject)
+
+rpartTree2 <- as.party(rpartTree)
+plot(rpartTree2)
+```
+
+# Model Trees
+
+```{r warning=F, message=F}
+m5tree <- MSP(y ~ ., data = trainData)
+# or, for rules:
+m5rules <- M5Rules(y ~ ., data = trainData)
+
+m5tree <- M5P(y ~ ., data = trainData,
+              control = Weka_control(M = 10))
+
+set.seed(100)
+m5Tune <- train(solTrainXtrans, solTrainY,
+                method = "M5",
+                trControl = trainControl(method = "cv"),
+                control = Weka_control(M = 10))
+# Use an option for M5() to specify the minimum number of samples needed
+# to further splits the data to be 10
+
+plot(m5Tune)
+```
+
+# Bagged Trees
+
+```{r warning=F, message=F}
+baggedTree <- ipredbagg(solTrainY, solTrainXtrans)
+# or
+baggedTree <- bagging(y ~ ., data = trainData)
+
+# the mtry parameter should be the number of predictors
+# (the number of columns minus 1 for the outcome).
+bagCtrl <- cforest_control(mtry = ncol(trainData) - 1)
+baggedTree <- cforest(y ~ ., data = trainData, controls = bagCtrl)
+```
+
+# Random Forest
+
+```{r warning=F, message=F}
+rfModel <- randomForest(solTrainXtrans, solTrainY)
+# or
+rfModel <- randomForest(y ~ ., data = trainData)
+
+rfModel <- randomForest(solTrainXtrans, solTrainY,
+                        importance = TRUE,
+                        ntrees = 1000)
+```
+
+# Boosted Trees
+
+```{r warning=F, message=F}
+gbmModel <- gbm.fit(solTrainXtrans, solTrainY, distribution = "gaussian")
+# or
+gbmModel <- gbm(y ~ ., data = trainData, distribution = "gaussian")
+
+gbmGrid <- expand.grid(.interaction.depth = seq(1, 7, by = 2),
+                       .n.trees = seq(100, 1000, by = 50),
+                       .shrinkage = c(0.01, 0.1))
+
+set.seed(100)
+gbmTune <- train(solTrainXtrans, solTrainY,
+                 method = "gbm",
+                 tuneGrid = gbmGrid,
+                 verbose = FALSE)
+# The gbm() function produces copious amounts of output,
+# so pass in the verbose option to avoid printing a lot to the screen.
+```
+
+# Cubist
+
+```{r warning=F, message=F}
+cubistMod <- cubist(solTrainXtrans, solTrainY)
+predict(cubistMod, solTestXtrans)
+
+cubistTrend <- train(solTrainXtrans, solTrainY, method = "cubist")
+```
 
 ```{r warning=F, message=F}
 
