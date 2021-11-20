@@ -24,6 +24,9 @@ library(partykit)
 library(randomForest)
 library(rpart)
 library(RWeka)
+
+# Set seed for assignment
+set.seed(200)
 ```
 
 
@@ -33,7 +36,6 @@ Recreate the simulated data from Exercise 7.2:
 
 ```{r warning=F, message=F}
 library(mlbench)
-set.seed(200)
 simulated <-mlbench.friedman1(200, sd = 1)
 simulated <-cbind(simulated$x, simulated$y)
 simulated <-as.data.frame(simulated)
@@ -47,82 +49,168 @@ simulated
 Fit a random forest model to all of the predictors, then estimate the variable importance scores:
 
 ```{r warning=F, message=F}
-model1 <-randomForest(y ~ ., data = simulated,
-                      importance = TRUE,
-                      ntree = 1000)
-rfImp1 <-varImp(model1, scale = FALSE)
+model1 <- randomForest(y ~ ., 
+                       data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+
+rfImp1 <- varImp(model1, scale = FALSE)
 
 rfImp1
 ```
 
-Did the random forest model significantly use the uninformative predictors (V6 – V10)?
+Did the random forest model significantly use the uninformative predictors (`V6` – `V10`)?
 
-**Answer:** XXX
+**Answer:** No, based on the output of the variable importance above, the uninformative predictors score very close to zero.
+
+**Note:** The importance value of `V1` is 8.83890885, which is the highest score.
 
 ## Section b
 
 Now add an additional predictor that is highly correlated with one of the informative predictors. For example:
 
 ```{r warning=F, message=F}
-simulated$duplicate1 <-simulated$V1 + rnorm(200) * .1
+simulated$duplicate1 <- simulated$V1 + rnorm(200) * .1
+
 cor(simulated$duplicate1, simulated$V1)
 ```
 
+**Result:** Yes, the correlation between `V1` and `duplicate1` is above 90% ... highly correlated.
+
 Fit another random forest model to these data. Did the importance score for `V1` change? What happens when you add another predictor that is also highly correlated with `V1`?
 
-**Answer:** XXX
+```{r warning=F, message=F}
+model2 <- randomForest(y ~ ., 
+                       data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+
+rfImp2 <- varImp(model2, scale = FALSE)
+
+rfImp2
+```
+
+**Answer:** The importance value of `V1` decreased to 6.29780744 from 8.83890885 with the addition of variable `duplicate1`. A drop of almost 29%.
+
+```{r warning=F, message=F}
+simulated$duplicate2 <- simulated$V1 + rnorm(200) * .1
+
+cor(simulated$duplicate2, simulated$V1)
+```
+
+**Result:** The correlation between `V1` and `duplicate2` is also above 93%.
+
+```{r warning=F, message=F}
+model3 <- randomForest(y ~ ., 
+                       data = simulated,
+                       importance = TRUE,
+                       ntree = 1000)
+
+rfImp3 <- varImp(model3, scale = FALSE)
+
+rfImp3
+```
+
+**Answer:** Again, the importance of `V1` has decreased, this time from 6.29780744 to 5.656397024 with the addition of a second highly correlated variable. 
 
 ## Section c
 
 Use the `cforest` function in the `party` package to fit a random forest model using conditional inference trees. The `party` package function `varimp` can calculate predictor importance. The `conditional` argument of that function toggles between the traditional importance measure and the modified version described in Strobl et al. (2007). Do these importances show the same pattern as the traditional random forest model?
 
 ```{r warning=F, message=F}
+bagCtrl <- cforest_control(mtry = ncol(simulated) - 1)
 
+model4 <- party::cforest(y ~ ., data = simulated, controls = bagCtrl)
+
+rfImp4_condFalse <- party::varimp(model4, conditional = FALSE)
+
+rfImp4_condTrue <- party::varimp(model4, conditional = TRUE)
+
+rfImp4_condFalse
+
+rfImp4_condTrue
 ```
 
-**Answer:** XXX
+**Answer:** When parameter `conditional` is set to FALSE, then the importance for `V1` appears in line with the above models at a value of 7.373153827. When parameter `conditional` is TRUE, however, the importance of `V1` is much lower at  1.0901055795 and does not follow the pattern of the traditional random forest model.
 
 ## Section d
 
 Repeat this process with different tree models, such as boosted trees and Cubist. Does the same pattern occur?
 
-```{r warning=F, message=F}
+### Boosted Trees
 
+```{r warning=F, message=F}
+gbmModel <- gbm(y ~ ., 
+                data = simulated, 
+                distribution = "gaussian")
+
+summary.gbm(gbmModel)
 ```
 
 **Answer:** XXX
+
+### Cubist
+
+```{r warning=F, message=F}
+pred_vars <- simulated %>% select(-c(y))
+
+cubistMod <- cubist(pred_vars, simulated$y, committees = 100)
+
+#summary(cubistMod)
+
+varImp(cubistMod)
+```
+
+**Answer:** XXX
+
+-----
 
 # Exercise 8.2
 
 Use a simulation to show tree bias with different granularities.
 
 ```{r warning=F, message=F}
+set.seed(200)
+x1 <- trunc(runif(100, 1, 100)) # 100 values between 1-100
+x2 <- trunc(runif(100, 1, 25))  # 100 values between 1-25
+x3 <- trunc(runif(100, 1, 10))  # 100 values between 1-10
+y <-  trunc(runif(100, 1, 50)) 
 
+df <- as.data.frame(cbind(y, x1, x2, x3))
+
+rpartTree <- rpart(y ~ ., data = df)
+
+sim_var_imp <- varImp(rpartTree)
+
+sim_var_imp
 ```
+
+**Answer:** The results of the variable importance does reflect the tree bias expected based on the textbook description "trees suffer from selection bias: predictors with a higher number of distinct values are favored over more granular predictors." Variable `x1` has the highest number of distinct values and then has the highest variable importance, while `x3` has the lowest number of distinct values and results in the lowest variable importance. 
+
+-----
 
 # Exercise 8.3
 
 In stochastic gradient boosting the bagging fraction and learning rate will govern the construction of the trees as they are guided by the gradient. Although the optimal values of these parameters should be obtained through the tuning process, it is helpful to understand how the magnitudes of these parameters affect magnitudes of variable importance. Figure 8.24 provides the variable importance plots for boosting using two extreme values for the bagging fraction (0.1 and 0.9) and the learning rate (0.1 and 0.9) for the solubility data. The left-hand plot has both parameters set to 0.1, and the right-hand plot has both set to 0.9:
 
-```{r warning=F, message=F}
+From textbook, page 206
 
-```
+"only a fraction of the current predicted value is added to the previous iteration’s predicted value. This fraction is commonly referred to as the learning rate "
+Small values of the learning parameter work best
+
+"The fraction of training data used, known as the bagging fraction, then becomes another tuning parameter for the model." suggestion is 0.5
 
 ## Section a
 
 Why does the model on the right focus its importance on just the first few of predictors, whereas the model on the left spreads importance across more predictors?
 
-```{r warning=F, message=F}
-
-```
+**Answer:** With a low learning rate (0.1), the model on the left would be adding a small fraction to the predicted value for each iteration of the predicted value, thus leading to the likely possibility of more predictors showing importance in the overall model. Wht a high learning rate (0.9), the model on the right will make use of fewer predictors because the percentage of the predicted value is much higher each iteration.
 
 ## Section b
 
 Which model do you think would be more predictive of other samples?
 
-```{r warning=F, message=F}
-
-```
+**Answer:** XXX
 
 ## Section c
 
@@ -131,6 +219,10 @@ How would increasing interaction depth affect the slope of predictor importance 
 ```{r warning=F, message=F}
 
 ```
+
+**Answer:** XXX
+
+-----
 
 # Exercise 8.7
 
@@ -175,9 +267,134 @@ test_data <- cmp_full_data[-trainingRows, ]
 
 Which tree-based regression model gives the optimal re-sampling and test set performance?
 
-```{r warning=F, message=F}
 
+### Single Tree
+
+```{r warning=F, message=F}
+rpartTune <- train(Yield ~ .,
+                   data = training_data,
+                   method = "rpart2",
+                   tuneLength = 10,
+                   trControl = trainControl(method = "cv"))
+# Output model
+rpartTune
+# Plot model
+ggplot(rpartTune) + labs(title="Single Tree Model With Tuning")
+
+# Make predictions on Test set
+rpartPred <-predict(rpartTune, newdata = test_data)
+# Output prediction performance
+rpart_test_perf <- postResample(pred = rpartPred, obs = test_data$Yield)
+rpart_test_perf
+
+# Variable importance of MARS model
+rpart_var_imp <- varImp(rpartTune)
+rpart_var_imp
 ```
+
+### Model Trees
+
+```{r warning=F, message=F}
+m5Tune <- train(Yield ~ .,
+                data = training_data,
+                method = "M5",
+                trControl = trainControl(method = "cv"),
+                control = Weka_control(M = 10))
+# Output model
+m5Tune
+# Plot model
+ggplot(m5Tune) + labs(title="Model Trees With Tuning")
+
+# Make predictions on Test set
+m5Pred <-predict(m5Tune, newdata = test_data)
+# Output prediction performance
+m5_test_perf <- postResample(pred = m5Pred, obs = test_data$Yield)
+m5_test_perf
+
+# Variable importance of MARS model
+m5_var_imp <- varImp(m5Tune)
+m5_var_imp
+```
+
+### Random Forest
+
+```{r warning=F, message=F}
+rfTune <- train(Yield ~ .,
+               data = training_data,
+               method = "rf",
+               tuneLength = 10,
+               trControl = trainControl(method = "cv"))
+
+# Output model
+rfTune
+# Plot model
+ggplot(rfTune) + labs(title="Random Forest With Tuning")
+
+# Make predictions on Test set
+rfPred <-predict(rfTune, newdata = test_data)
+# Output prediction performance
+rf_test_perf <- postResample(pred = rfPred, obs = test_data$Yield)
+rf_test_perf
+
+# Variable importance of MARS model
+rf_var_imp <- varImp(rfTune)
+rf_var_imp
+```
+
+### Boosted Trees
+
+```{r warning=F, message=F}
+gbmGrid <- expand.grid(interaction.depth = seq(1, 7, by = 2),
+                       n.trees = seq(100, 1000, by = 50),
+                       shrinkage = c(0.01, 0.1),
+                       n.minobsinnode = 10)
+
+gbmTune <- train(Yield ~ .,
+                 data = training_data,
+                 method = "gbm",
+                 tuneGrid = gbmGrid,
+                 verbose = FALSE)
+
+# Output model
+gbmTune
+# Plot model
+ggplot(gbmTune) + labs(title="Boosted Trees With Tuning")
+
+# Make predictions on Test set
+gbmPred <-predict(gbmTune, newdata = test_data)
+# Output prediction performance
+gbm_test_perf <- postResample(pred = gbmPred, obs = test_data$Yield)
+gbm_test_perf
+
+# Variable importance of MARS model
+gbm_var_imp <- varImp(gbmTune)
+gbm_var_imp
+```
+
+### Cubist
+
+```{r warning=F, message=F}
+cubistTuned <- train(Yield ~ .,
+                     data = training_data, 
+                     method = "cubist")
+
+# Output model
+cubistTuned
+# Plot model
+ggplot(cubistTuned) + labs(title="Cubist Model With Tuning")
+
+# Make predictions on Test set
+cubPred <-predict(cubistTuned, newdata = test_data)
+# Output prediction performance
+cub_test_perf <- postResample(pred = cubPred, obs = test_data$Yield)
+cub_test_perf
+
+# Variable importance of MARS model
+cub_var_imp <- varImp(cubistTuned)
+cub_var_imp
+```
+
+**Answer:** XXX
 
 ## Section b
 
@@ -187,6 +404,8 @@ Which predictors are most important in the optimal tree-based regression model? 
 
 ```
 
+**Answer:** XXX
+
 ## Section c
 
 Plot the optimal single tree with the distribution of yield in the terminal nodes. Does this view of the data provide additional knowledge about the biological or process predictors and their relationship with yield?
@@ -195,21 +414,29 @@ Plot the optimal single tree with the distribution of yield in the terminal node
 
 ```
 
-
+**Answer:** XXX
 
 #30#
-
-# Computing section
-
-
 
 ```{r warning=F, message=F}
 
 ```
 
-# Single Tree
+```{r warning=F, message=F}
+
+```
 
 ```{r warning=F, message=F}
+
+```
+
+
+
+# Computing section
+
+# Single Tree
+
+```{r warning=F, message=F, eval=F}
 rpartTree <- rparty(y ~ ., data=trainData)
 # or
 ctreeTree <- ctree(y ~ ., data=trainData)
@@ -229,7 +456,7 @@ plot(rpartTree2)
 
 # Model Trees
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 m5tree <- MSP(y ~ ., data = trainData)
 # or, for rules:
 m5rules <- M5Rules(y ~ ., data = trainData)
@@ -250,7 +477,7 @@ plot(m5Tune)
 
 # Bagged Trees
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 baggedTree <- ipredbagg(solTrainY, solTrainXtrans)
 # or
 baggedTree <- bagging(y ~ ., data = trainData)
@@ -263,7 +490,7 @@ baggedTree <- cforest(y ~ ., data = trainData, controls = bagCtrl)
 
 # Random Forest
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 rfModel <- randomForest(solTrainXtrans, solTrainY)
 # or
 rfModel <- randomForest(y ~ ., data = trainData)
@@ -275,7 +502,7 @@ rfModel <- randomForest(solTrainXtrans, solTrainY,
 
 # Boosted Trees
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 gbmModel <- gbm.fit(solTrainXtrans, solTrainY, distribution = "gaussian")
 # or
 gbmModel <- gbm(y ~ ., data = trainData, distribution = "gaussian")
@@ -295,25 +522,9 @@ gbmTune <- train(solTrainXtrans, solTrainY,
 
 # Cubist
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 cubistMod <- cubist(solTrainXtrans, solTrainY)
 predict(cubistMod, solTestXtrans)
 
-cubistTrend <- train(solTrainXtrans, solTrainY, method = "cubist")
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
+cubistTuned <- train(solTrainXtrans, solTrainY, method = "cubist")
 ```
