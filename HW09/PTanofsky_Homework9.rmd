@@ -3,7 +3,16 @@ title: "DATA 624 Assignment 9"
 subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
 date: "`r format(Sys.time(), '%d %B %Y')`"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false
+    theme: united
+    highlight: tango
 ---
 
 ```{r warning=F, message=F}
@@ -24,6 +33,7 @@ library(partykit)
 library(randomForest)
 library(rpart)
 library(RWeka)
+library(kableExtra)
 
 # Set seed for assignment
 set.seed(200)
@@ -41,7 +51,7 @@ simulated <-cbind(simulated$x, simulated$y)
 simulated <-as.data.frame(simulated)
 colnames(simulated)[ncol(simulated)] <-"y"
 
-simulated
+#simulated
 ```
 
 ## Section a
@@ -147,7 +157,7 @@ gbmModel <- gbm(y ~ .,
 summary.gbm(gbmModel)
 ```
 
-**Answer:** XXX
+**Answer:** For boosted trees, a slightly different pattern emerges. Due to the two duplicate predictor variables, predictor variable `V1` has the third highest relative influence. The sum of `V1` and the two duplicates totals 26.96% overall influence, which puts the combined total second.  As expected, the uninformative predictors `V6`-`V10` have little to no relative influence.
 
 ### Cubist
 
@@ -161,13 +171,15 @@ cubistMod <- cubist(pred_vars, simulated$y, committees = 100)
 varImp(cubistMod)
 ```
 
-**Answer:** XXX
+**Answer:** The Cubist model results in a different pattern than above, in which `V1` has the clear highest overall importance at 65.5% despite the inclusion of the two duplicate variables. As for the uninformative variables, the scores are close to zero as expected.
 
 -----
 
 # Exercise 8.2
 
 Use a simulation to show tree bias with different granularities.
+
+I've created three vectors, each of 100 values. The `x1` vector contains values from 1-100 inclusive, and thus the highest number of distinct values. The `x2` vector contains values from 1-25 inclusive. The `x3` vector contains values from 1-10 inclusvie, and thus the lowest number of distinct values.
 
 ```{r warning=F, message=F}
 set.seed(200)
@@ -210,7 +222,7 @@ Why does the model on the right focus its importance on just the first few of pr
 
 Which model do you think would be more predictive of other samples?
 
-**Answer:** XXX
+**Answer:** The model on the left with the lower learning rate and the lower bagging fraction shold be more predictive of other samples. The smaller value of the learning rate typically work better. Regarding the bagging fraction, according to the textbook, the recommendation is 0.5, so given the options of 0.1 or 0.9, I think the lower bagging fraction in conjunction with the lower learning rate would be more predictive of the two options.
 
 ## Section c
 
@@ -220,7 +232,7 @@ How would increasing interaction depth affect the slope of predictor importance 
 
 ```
 
-**Answer:** XXX
+**Answer:** Increasing the interaction depth should lower the slope of predictor importance for either model. XXX
 
 -----
 
@@ -263,10 +275,7 @@ training_data <- cmp_full_data[trainingRows, ]
 test_data <- cmp_full_data[-trainingRows, ]
 ```
 
-## Section a
-
-Which tree-based regression model gives the optimal re-sampling and test set performance?
-
+With the goal of assessing tree-based regression models on the chemical manufacturing process data, I have fit models of a single tree, model trees, random forest, boosted trees and cubist.
 
 ### Single Tree
 
@@ -394,6 +403,22 @@ cub_var_imp <- varImp(cubistTuned)
 cub_var_imp
 ```
 
+## Section a
+
+Which tree-based regression model gives the optimal re-sampling and test set performance?
+
+```{r warning=F, message=F}
+perf_results <- data.frame(Single_Tree=rpart_test_perf,
+                           Model_Trees=m5_test_perf,
+                           Random_Forest=rf_test_perf,
+                           Boosted_Trees=gbm_test_perf,
+                           Cubist=cub_test_perf)
+
+perf_results %>% t() %>% 
+  kable(caption="Comparison of Model Performance", digits=4) %>%
+  kable_styling(bootstrap_options = c("hover", "striped"))
+```
+
 **Answer:** XXX
 
 ## Section b
@@ -411,120 +436,7 @@ Which predictors are most important in the optimal tree-based regression model? 
 Plot the optimal single tree with the distribution of yield in the terminal nodes. Does this view of the data provide additional knowledge about the biological or process predictors and their relationship with yield?
 
 ```{r warning=F, message=F}
-
+plot(as.party(rpartTune$finalModel),gp=gpar(fontsize=11))
 ```
 
 **Answer:** XXX
-
-#30#
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-
-
-# Computing section
-
-# Single Tree
-
-```{r warning=F, message=F, eval=F}
-rpartTree <- rparty(y ~ ., data=trainData)
-# or
-ctreeTree <- ctree(y ~ ., data=trainData)
-
-#===== Train model
-set.seed(100)
-rpartTune <- train(solTrainXtrans, solTrainY,
-                   method = "rpart2",
-                   tuneLength = 10,
-                   trControl = trainControl(method = "cv"))
-
-plot(treeObject)
-
-rpartTree2 <- as.party(rpartTree)
-plot(rpartTree2)
-```
-
-# Model Trees
-
-```{r warning=F, message=F, eval=F}
-m5tree <- MSP(y ~ ., data = trainData)
-# or, for rules:
-m5rules <- M5Rules(y ~ ., data = trainData)
-
-m5tree <- M5P(y ~ ., data = trainData,
-              control = Weka_control(M = 10))
-
-set.seed(100)
-m5Tune <- train(solTrainXtrans, solTrainY,
-                method = "M5",
-                trControl = trainControl(method = "cv"),
-                control = Weka_control(M = 10))
-# Use an option for M5() to specify the minimum number of samples needed
-# to further splits the data to be 10
-
-plot(m5Tune)
-```
-
-# Bagged Trees
-
-```{r warning=F, message=F, eval=F}
-baggedTree <- ipredbagg(solTrainY, solTrainXtrans)
-# or
-baggedTree <- bagging(y ~ ., data = trainData)
-
-# the mtry parameter should be the number of predictors
-# (the number of columns minus 1 for the outcome).
-bagCtrl <- cforest_control(mtry = ncol(trainData) - 1)
-baggedTree <- cforest(y ~ ., data = trainData, controls = bagCtrl)
-```
-
-# Random Forest
-
-```{r warning=F, message=F, eval=F}
-rfModel <- randomForest(solTrainXtrans, solTrainY)
-# or
-rfModel <- randomForest(y ~ ., data = trainData)
-
-rfModel <- randomForest(solTrainXtrans, solTrainY,
-                        importance = TRUE,
-                        ntrees = 1000)
-```
-
-# Boosted Trees
-
-```{r warning=F, message=F, eval=F}
-gbmModel <- gbm.fit(solTrainXtrans, solTrainY, distribution = "gaussian")
-# or
-gbmModel <- gbm(y ~ ., data = trainData, distribution = "gaussian")
-
-gbmGrid <- expand.grid(.interaction.depth = seq(1, 7, by = 2),
-                       .n.trees = seq(100, 1000, by = 50),
-                       .shrinkage = c(0.01, 0.1))
-
-set.seed(100)
-gbmTune <- train(solTrainXtrans, solTrainY,
-                 method = "gbm",
-                 tuneGrid = gbmGrid,
-                 verbose = FALSE)
-# The gbm() function produces copious amounts of output,
-# so pass in the verbose option to avoid printing a lot to the screen.
-```
-
-# Cubist
-
-```{r warning=F, message=F, eval=F}
-cubistMod <- cubist(solTrainXtrans, solTrainY)
-predict(cubistMod, solTestXtrans)
-
-cubistTuned <- train(solTrainXtrans, solTrainY, method = "cubist")
-```
