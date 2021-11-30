@@ -582,37 +582,55 @@ plot(pred_lm1, sdata_test_pp$PH )
 
 ## Cubist
 
-The cubist approach is a simple rule-based model with a single committee and no instance-based adjustment, as outlined in the textbook.
+The cubist approach is 
+
+"tune the model over values of committees and neighbors through resampling:"
 
 ```{r warning=F, message=F}
 library(Cubist)
 
+# from: https://topepo.github.io/Cubist/articles/extras/tuning.html
+grid <- expand.grid(committees = c(1, 10, 50, 100), 
+                    neighbors = c(0, 1, 5, 9))
+
 # cols for model (removing Id)
 cols_train <- sdata_train_pp %>% select(-c("id"))
 
+cubist_grid <- train(PH ~ .,
+                     cols_train,
+                     method = "cubist",
+                     tuneGrid = grid,
+                     trControl = trainControl(method = "cv")
+                     )
+# Output model
+cubist_grid
+
+# Plot model
+ggplot(cubist_grid) + labs(title="Cubist Model With Tuning")
+
 # Tune Cubist model
-cubist_tune1 <- train(PH ~ .,
+#cubist_tune1 <- train(PH ~ .,
 #                     data = sdata_train_pp, 
-                      cols_train,
-                     method = "cubist")
+#                      cols_train,
+#                     method = "cubist")
 
 # Output model
-cubist_tune1
+#cubist_tune1
+
 # Plot model
-ggplot(cubist_tune1) + labs(title="Cubist Model With Tuning")
+#ggplot(cubist_grid) + labs(title="Cubist Model With Tuning")
 
 # Make predictions on Test set
-pred_cubist <- predict(cubist_tune1, newdata = sdata_test_pp)
+pred_cubist <- predict(cubist_grid, newdata = sdata_test_pp)
 
 # Output prediction performance
 cubist_test_perf <- postResample(pred = pred_cubist, obs = sdata_test_pp$PH)
 cubist_test_perf
 
 # Variable importance
-cubist_varImp <- varImp(cubist_tune1)
+cubist_varImp <- varImp(cubist_grid)
 cubist_varImp
 ```
-
 
 ## Boosting
 
@@ -620,10 +638,10 @@ The boosting regression approach relies on stochastic gradient boosting machines
 
 ```{r warning=F, message=F}
 library(gbm)
-gbm_grid <- expand.grid(interaction.depth = seq(1, 7, by = 2),
-                       n.trees = seq(100, 200, by = 50),
-                       shrinkage = c(0.1, 0.1),
-                       n.minobsinnode = c(5, 10, 15))
+gbm_grid <- expand.grid(interaction.depth = 7,
+                       n.trees = seq(500, 1000, by = 100),
+                       shrinkage = 0.02,
+                       n.minobsinnode = 15)
 
 gbm_tune1 <- train(PH ~ .,
                    data = cols_train,
@@ -663,10 +681,8 @@ ctrl <- trainControl(method = "cv", number = 10)
 pls_tune1 <- train(PH ~ .,
                 data = cols_train,
                 method = "pls",
-                metric = "Rsquared",
-                tuneLength = 20,
-                trControl = ctrl,
-                preProc = c("center", "scale")) 
+                tuneLength = 30,
+                trControl = ctrl) 
 # Output model
 pls_tune1
 # Plot model
