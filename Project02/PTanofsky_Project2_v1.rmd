@@ -3,7 +3,16 @@ title: "DATA 624 Project 2 v1"
 subtitle: "CUNY Fall 2021"
 author: "Philip Tanofsky"
 date: "`r format(Sys.time(), '%d %B %Y')`"
-output: html_document
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false
+    theme: united
+    highlight: tango
 ---
 
 ```{r warning=F, message=F}
@@ -38,6 +47,8 @@ str(bev_data_raw)
 # 1 chr column: Brand Code
 # Remainder are number columns
 # PH is the result column
+
+summary(bev_data_raw)
 ```
 
 ```{r warning=F, message=F}
@@ -55,7 +66,7 @@ bev_data_raw[13]
 ```
 
 ```{r warning=F, message=F, fig.width=12, fig.height=10}
-corr <- bev_data_raw %>% 
+corr <- bev_data_raw %>% drop_na() %>%
   select(-c('Brand Code')) %>% cor()
 
 corrplot(corr, method="number")
@@ -67,25 +78,48 @@ corrplot(corr, method="number")
 cols <- bev_data_raw %>%
   select(-c('Brand Code', 'PH')) %>% colnames()
 
-featurePlot(bev_data_raw[,cols], bev_data_raw$PH) 
+#featurePlot(bev_data_raw[,cols], bev_data_raw$PH, "ellipse") 
+#featurePlot(bev_data_raw[,cols], bev_data_raw$PH, "strip", jitter = TRUE)
+#featurePlot(bev_data_raw[,cols], bev_data_raw$PH, "box") 
+#featurePlot(bev_data_raw[,cols], bev_data_raw$PH, "pairs") 
+featurePlot(bev_data_raw[,cols], 
+            bev_data_raw$PH, 
+            plot="scatter",
+            type = c("p", "smooth"),
+            span = .5,
+            layout=c(1,1))
 ```
 
 #30#
 
 ```{r warning=F, message=F}
-
+# http://www.sthda.com/english/wiki/normality-test-in-r
+# From the output, the p-value > 0.05 implying that the distribution of the data are not significantly different from normal distribution. In other words, we can assume the normality.
+apply(bev_data_raw[,cols],2,shapiro.test)
+# Result: None of the numeric variables are normally distributed.
 ```
 
 ```{r warning=F, message=F}
-
+ggplot(data = bev_data_raw) +
+  geom_bar(mapping = aes(x = `Brand Code`))
 ```
 
 ```{r warning=F, message=F}
-
+ggplot(data = bev_data_raw, mapping = aes(x = `Brand Code`, y = PH)) +
+  geom_boxplot()
 ```
 
 ```{r warning=F, message=F}
+library(VSURF)
 
+bev_data_no_nas <- bev_data_raw %>% drop_na()
+
+bev.vsurf <- VSURF(bev_data_no_nas[,cols], 
+                   bev_data_no_nas$PH,
+                   ntree = 10,
+                   nfor.thres = 20,
+                   nfor.interp = 10, nfor.pred = 10)
+bev.vsurf
 ```
 
 ```{r warning=F, message=F}
