@@ -109,19 +109,44 @@ inspect(head(rules_conf))
 ```
 
 ```{r warning=F, message=F}
-
+# https://cran.r-project.org/web/packages/arulesViz/vignettes/arulesViz.pdf
+options(digits = 2)
+set.seed(1234)
+summary(grocery_ds)
 ```
 
 ```{r warning=F, message=F}
-
+rules <- apriori(grocery_ds, parameter=list(support=0.001, confidence=0.5))
 ```
 
 ```{r warning=F, message=F}
-
+rules
 ```
 
 ```{r warning=F, message=F}
+plot(rules)
+```
 
+```{r warning=F, message=F}
+head(quality(rules))
+```
+
+```{r warning=F, message=F}
+plot(rules, measure=c("support", "lift"), shading="confidence")
+```
+
+```{r warning=F, message=F}
+plot(rules, method="two-key plot")
+```
+
+```{r warning=F, message=F, fig.height=8}
+plot(rules, method="grouped", control = list(k = 10))
+```
+
+
+```{r warning=F, message=F}
+subrules2 <- head(rules, n=10, by="lift")
+plot(subrules2, method="graph")
 ```
 
 #30#
