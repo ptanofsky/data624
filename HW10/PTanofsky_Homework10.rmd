@@ -1,0 +1,148 @@
+---
+title: "DATA 624 Assignment 10"
+subtitle: "CUNY Fall 2021"
+author: "Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false
+    theme: united
+    highlight: tango
+---
+
+```{r warning=F, message=F}
+# Import required R libraries
+library(tidyverse)
+library(arules)
+library(arulesViz)
+
+# Set seed for assignment
+set.seed(200)
+```
+
+# Retrieve Data
+
+```{r warning=F, message=F, eval=F}
+#grocery_ds <- read.csv("GroceryDataSet.csv", header=FALSE)
+```
+
+```{r warning=F, message=F, eval=F}
+# DO NOT MANUALLY EXECUTE
+View(grocery_ds)
+nrow(grocery_ds) # 9835
+ncol(grocery_ds) # 32
+colnames(grocery_ds) # No real names, default to V1 - V32
+str(grocery_ds) # data.frame:	9835 obs. of  32 variables:
+```
+
+
+```{r warning=F, message=F, eval=F}
+# http://r-statistics.co/Association-Mining-With-R.html
+#library(arules)
+#data(Groceries)
+#inspect(head(Groceries, 3))
+```
+
+```{r warning=F, message=F}
+grocery_ds <- read.transactions("GroceryDataSet.csv", sep=",")
+inspect(head(grocery_ds, 3))
+```
+
+```{r warning=F, message=F}
+size(head(grocery_ds))
+LIST(head(grocery_ds, 3))
+```
+
+```{r warning=F, message=F}
+frequentItems <- eclat(grocery_ds, parameter = list(supp=0.07, maxlen=15)) # calculates support for frequent items
+inspect(frequentItems)
+itemFrequencyPlot(grocery_ds, topN=10, type="absolute", main="Item Frequency") # plot frequent items
+```
+
+```{r warning=F, message=F}
+rules <- apriori(grocery_ds, parameter=list(supp=0.001, conf=0.5)) # Min Support as 0.001, confidence as 0.8
+rules_conf <- sort(rules, by="confidence", decreasing=TRUE)
+inspect(head(rules_conf))
+```
+
+```{r warning=F, message=F}
+rules_lift <- sort(rules, by="lift", decreasing=TRUE)
+inspect(head(rules_lift))
+```
+
+```{r warning=F, message=F}
+rules <- apriori(grocery_ds, parameter = list (supp = 0.001, conf = 0.5, maxlen=3))
+length(rules)
+# maxlen = 3 limits the elements in a rule to 3
+```
+
+```{r warning=F, message=F}
+subsetRules <- which(colSums(is.subset(rules, rules)) > 1) # get subset rules in vector
+length(subsetRules)  #> 3913
+rules <- rules[-subsetRules] # remove subset rules.
+```
+
+
+To find what factors influence purchase of product X
+
+```{r warning=F, message=F, eval=F}
+# EVAL=F
+# How to find rules related to given item/s?
+rules <- apriori(data=grocery_ds, parameter=list(supp=-.001, conf=0.08), appearance = list(default="lhs",rhs="whole milk"), control=list(verbose=F)) # get rules that lead to buying 'whole milk'
+rules_conf <- sort(rules, by="confidence", decreasing=TRUE) # 'high-confidence' rules
+inspect(head(rules_conf))
+
+```
+
+To find out what products were purchased after/along with product X
+
+```{r warning=F, message=F, eval=F}
+# EVAL=F
+rules <- apriori(data=grocery_ds, parameter=list(supp=0.001, confo=0.15, minlen=2), appearance=list(default="rhs",lhs="whole milk"), control=list(verbose=F)) # those who bought 'milk' also bought ...
+rules_conf <- sort(rules, by="confidence", decreasing=TRUE) # high-confidence rules
+inspect(head(rules_conf))
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+#30#
+
+
+
+
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
+```{r warning=F, message=F}
+
+```
+
