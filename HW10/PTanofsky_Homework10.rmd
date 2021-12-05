@@ -15,9 +15,19 @@ output:
     highlight: tango
 ---
 
+# Exercise
+
+Imagine 10000 receipts sitting on your table. Each receipt represents a transaction with items that were purchased. The receipt is a representation of stuff that went into a customer's basket - and therefore 'Market Basket Analysis'.
+
+That is exactly what the Groceries Data Set contains: a collection of receipts with each line representing 1 receipt and the items purchased. Each line is called a transaction and each column in a row represents an item. The data set is attached.
+
+Your assignment is to use R to mine the data for association rules. You should report support, confidence and lift and your top 10 rules by lift.
+
+**Extra credit:** do a simple cluster analysis on the data as well. Use whichever packages you like. Due May 3 before midnight.
+
 ```{r warning=F, message=F}
 # Import required R libraries
-library(tidyverse)
+#library(tidyverse)
 library(arules)
 library(arulesViz)
 
@@ -25,68 +35,94 @@ library(arulesViz)
 set.seed(200)
 ```
 
-# Retrieve Data
+The `arules` package (<https://www.rdocumentation.org/packages/arules/versions/1.7-1>) "provides the infrastructure for representing, manipulating and analyzing transaction data and patterns using frequent itemsets and association rules." The `arules` library contains the data structure definitions and mining algorithms - APRIORI and ECLAT.
 
-```{r warning=F, message=F, eval=F}
-#grocery_ds <- read.csv("GroceryDataSet.csv", header=FALSE)
-```
+The `arulesViz` library provides visualizations for the association rules.
 
-```{r warning=F, message=F, eval=F}
-# DO NOT MANUALLY EXECUTE
-View(grocery_ds)
-nrow(grocery_ds) # 9835
-ncol(grocery_ds) # 32
-colnames(grocery_ds) # No real names, default to V1 - V32
-str(grocery_ds) # data.frame:	9835 obs. of  32 variables:
-```
+Is this making life easier for me?
 
+# Exploratory Data Analysis
 
-```{r warning=F, message=F, eval=F}
-# http://r-statistics.co/Association-Mining-With-R.html
-#library(arules)
-#data(Groceries)
-#inspect(head(Groceries, 3))
-```
+Using the example provided at <http://r-statistics.co/Association-Mining-With-R.html>, I read in the provided CSV file as transactions objects per the `arules` package.
 
 ```{r warning=F, message=F}
+# http://r-statistics.co/Association-Mining-With-R.html
 grocery_ds <- read.transactions("GroceryDataSet.csv", sep=",")
-inspect(head(grocery_ds, 3))
+class(grocery_ds)
 ```
+
+The `class()` function confirms the `grocery_ds` object is transactions from the `arules` package.
+
+```{r warning=F, message=F}
+summary(grocery_ds)
+```
+
+Summary of the grocery data set indicates 9835 rows, or individual receipts defined as transactions, with a total of 169 columns, or unique items. The most frequent items are whole milk, other vegetables, rolls/buns, soda, and yogurt. The median number of items per transaction is 3 with an average number of 4.4 items per transaction. The minimum is 1, which is expected, and the maximum items per a transaction is 32.
 
 ```{r warning=F, message=F}
 size(head(grocery_ds))
 LIST(head(grocery_ds, 3))
+inspect(head(grocery_ds, 3))
 ```
 
+The `size()` function confirms the item count per transaction and the `LIST()` function confirms the data object meets expectations, the first three transactions are displayed. The results above match the raw CSV file. The `inspect()` functions appears to behave the same as `LIST()` but perhaps a cleaner output presentation.
+
+## Support
+
 ```{r warning=F, message=F}
-frequentItems <- eclat(grocery_ds, parameter = list(supp=0.07, maxlen=15)) # calculates support for frequent items
+# calculates 'support' of the frequent items in the dataset
+support_val <- 0.07
+frequentItems <- eclat(grocery_ds, parameter = list(supp=support_val, maxlen=15))
+```
+
+The `eclat()` function "finds frequent item sets with the Eclat algorithm, which carries out a depth first search on the subset lattice and determines the support of item sets by intersecting transaction lists." (<https://borgelt.net/eclat.html>) The parameter `supp` represents $support$ which is defined as the proportion of transactions in the dataset which contain the item. The parameter value is the minimum threshold.
+
+```{r warning=F, message=F}
 inspect(frequentItems)
+```
+
+With a support value of `r support_val`, the output reports the above 19 results which indicates only one pair of items appear at that proportion of the time, whole milk and other vegetables. The result makes initial sense given those two items are the most frequent individually and are grocery staples.
+
+```{r warning=F, message=F}
 itemFrequencyPlot(grocery_ds, topN=10, type="absolute", main="Item Frequency") # plot frequent items
 ```
 
+The plot above displays a count of the 10 most frequent items with whole milk and other vegetables occurring most often, matching the results of the `summary()` function above.
+
+# Generate Association Rules
+
+## Confidence
+
 ```{r warning=F, message=F}
-rules <- apriori(grocery_ds, parameter=list(supp=0.001, conf=0.5)) # Min Support as 0.001, confidence as 0.8
+# Define minimum support
+# Define minimum confidence (increase to get stronger rules)
+# Increase maxlen to get longer rules
+supp_val <- 0.001
+conf_val <- 0.95
+rules <- apriori(grocery_ds, parameter=list(supp=supp_val, conf=conf_val, maxlen=5))
 rules_conf <- sort(rules, by="confidence", decreasing=TRUE)
-inspect(head(rules_conf))
 ```
+
+The `apriori()` function "finds association rules and frequent item sets with the Apriori algorithm, which carries out a breadth first search on the subset lattice and determines the support of item sets by subset tests." (<https://borgelt.net/apriori.html>)
+
+```{r warning=F, message=F}
+inspect(head(rules_conf, 10))
+```
+
+## Lift
 
 ```{r warning=F, message=F}
 rules_lift <- sort(rules, by="lift", decreasing=TRUE)
-inspect(head(rules_lift))
+inspect(head(rules_lift, 10))
 ```
 
-```{r warning=F, message=F}
-rules <- apriori(grocery_ds, parameter = list (supp = 0.001, conf = 0.5, maxlen=3))
-length(rules)
-# maxlen = 3 limits the elements in a rule to 3
-```
+## Redundant Rules
 
 ```{r warning=F, message=F}
 subsetRules <- which(colSums(is.subset(rules, rules)) > 1) # get subset rules in vector
 length(subsetRules)  #> 3913
 rules <- rules[-subsetRules] # remove subset rules.
 ```
-
 
 To find what factors influence purchase of product X
 
@@ -143,7 +179,6 @@ plot(rules, method="two-key plot")
 plot(rules, method="grouped", control = list(k = 10))
 ```
 
-
 ```{r warning=F, message=F}
 subrules2 <- head(rules, n=10, by="lift")
 plot(subrules2, method="graph")
@@ -151,10 +186,6 @@ plot(subrules2, method="graph")
 
 #30#
 
-
-
-
-
 ```{r warning=F, message=F}
 
 ```
@@ -170,4 +201,3 @@ plot(subrules2, method="graph")
 ```{r warning=F, message=F}
 
 ```
-
