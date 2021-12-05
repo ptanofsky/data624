@@ -15,7 +15,7 @@ output:
     highlight: tango
 ---
 
-# Exercise
+# Prompt
 
 Imagine 10000 receipts sitting on your table. Each receipt represents a transaction with items that were purchased. The receipt is a representation of stuff that went into a customer's basket - and therefore 'Market Basket Analysis'.
 
@@ -38,8 +38,6 @@ set.seed(200)
 The `arules` package (<https://www.rdocumentation.org/packages/arules/versions/1.7-1>) "provides the infrastructure for representing, manipulating and analyzing transaction data and patterns using frequent itemsets and association rules." The `arules` library contains the data structure definitions and mining algorithms - APRIORI and ECLAT.
 
 The `arulesViz` library provides visualizations for the association rules.
-
-Is this making life easier for me?
 
 # Exploratory Data Analysis
 
@@ -67,7 +65,7 @@ inspect(head(grocery_ds, 3))
 
 The `size()` function confirms the item count per transaction and the `LIST()` function confirms the data object meets expectations, the first three transactions are displayed. The results above match the raw CSV file. The `inspect()` functions appears to behave the same as `LIST()` but perhaps a cleaner output presentation.
 
-## Support
+## Support Evaluation
 
 ```{r warning=F, message=F}
 # calculates 'support' of the frequent items in the dataset
@@ -81,25 +79,26 @@ The `eclat()` function "finds frequent item sets with the Eclat algorithm, which
 inspect(frequentItems)
 ```
 
-With a support value of `r support_val`, the output reports the above 19 results which indicates only one pair of items appear at that proportion of the time, whole milk and other vegetables. The result makes initial sense given those two items are the most frequent individually and are grocery staples.
+With a support value of `r support_val`, the output reports the above 19 results which indicates only one pair of items appear at the given proportion of the time, whole milk and other vegetables. The result makes sense given those two items are the most frequent individually and are grocery staples.
 
 ```{r warning=F, message=F}
-itemFrequencyPlot(grocery_ds, topN=10, type="absolute", main="Item Frequency") # plot frequent items
+itemFrequencyPlot(grocery_ds, topN=10, type="absolute", main="Item Frequency")
 ```
 
 The plot above displays a count of the 10 most frequent items with whole milk and other vegetables occurring most often, matching the results of the `summary()` function above.
 
 # Generate Association Rules
 
-## Confidence
+## Confidence Evaluation
 
 ```{r warning=F, message=F}
 # Define minimum support
-# Define minimum confidence (increase to get stronger rules)
-# Increase maxlen to get longer rules
 supp_val <- 0.001
-conf_val <- 0.95
-rules <- apriori(grocery_ds, parameter=list(supp=supp_val, conf=conf_val, maxlen=5))
+# Define minimum confidence (increase to get stronger rules)
+conf_val <- 0.9
+# Increase maxlen to get longer rules
+maxlen_val <- 5
+rules <- apriori(grocery_ds, parameter=list(supp=supp_val, conf=conf_val, maxlen=maxlen_val))
 rules_conf <- sort(rules, by="confidence", decreasing=TRUE)
 ```
 
@@ -109,95 +108,72 @@ The `apriori()` function "finds association rules and frequent item sets with th
 inspect(head(rules_conf, 10))
 ```
 
-## Lift
+With a support value of `r supp_val` and confidence value of `r conf_val`, the above output shows 10 association rules with a resulting confidence value of 1. The confidence value of 1 indicates the item on the right hand side always occurs when the item or items on the left hand side occur. Not surprisingly, of the 10 rules displayed above, 9 rules indicate whole milk on the right hand side with other vegetables as the remaining value on the right hand side. Given the higher frequency of those two items, these results are expected.
+
+## Lift Evaluation
 
 ```{r warning=F, message=F}
 rules_lift <- sort(rules, by="lift", decreasing=TRUE)
 inspect(head(rules_lift, 10))
 ```
 
-## Redundant Rules
+The same values of support and confidence, and thus from the same resulting rules, the rules are sorted by lift value in order to find the 10 rules with the highest lift. The lift value indicates "the deviation of the support of the whole rule from the support expected under independence given the supports of the LHS and the RHS." (https://cran.r-project.org/web/packages/arules/vignettes/arules.pdf) The higher the lift value, the stronger the association between the LHS and the RHS.
+
+Note: I decided on confidence value of `r conf_val` so I could receive some high lift rules that didn't indicate whole milk and other vegetables on the right hand side. The top lift result (11.235269) given the parameter values is an LHS of liquor and red/blush wine and an RHS of bottled beer. That association makes sense for someone buying alcohol together. The rules with an RHS of yogurt shows different LHS items including butter, cream cheese, curd, and whipped/sour cream which seems valid given those items are typically in the same refrigerated section of a grocery store. Overall, none of the above rules sticks out like the infamous diapers to beer association.
 
 ```{r warning=F, message=F}
-subsetRules <- which(colSums(is.subset(rules, rules)) > 1) # get subset rules in vector
-length(subsetRules)  #> 3913
-rules <- rules[-subsetRules] # remove subset rules.
+# Could I find the diapers => beer rule
+supp_baby_val <- 0.001
+conf_baby_val <- 0.05
+rules_baby <- apriori(grocery_ds, 
+                 parameter=list(supp=supp_baby_val, conf=conf_baby_val),
+                 appearance = list (default="rhs", lhs="baby food"),
+                 control = list (verbose=F))
+
+rules_baby_conf <- sort (rules_baby, by="confidence", decreasing=TRUE)
+inspect(head(rules_baby_conf))
 ```
 
-To find what factors influence purchase of product X
+Nope, couldn't find the baby product to beer rule. Apparently, "baby food" as the LHS didn't produce any meaningful association, nor did "baby cosmetics" as the LHS.
 
-```{r warning=F, message=F, eval=F}
-# EVAL=F
-# How to find rules related to given item/s?
-rules <- apriori(data=grocery_ds, parameter=list(supp=-.001, conf=0.08), appearance = list(default="lhs",rhs="whole milk"), control=list(verbose=F)) # get rules that lead to buying 'whole milk'
-rules_conf <- sort(rules, by="confidence", decreasing=TRUE) # 'high-confidence' rules
-inspect(head(rules_conf))
+# Visualizations
 
-```
-
-To find out what products were purchased after/along with product X
-
-```{r warning=F, message=F, eval=F}
-# EVAL=F
-rules <- apriori(data=grocery_ds, parameter=list(supp=0.001, confo=0.15, minlen=2), appearance=list(default="rhs",lhs="whole milk"), control=list(verbose=F)) # those who bought 'milk' also bought ...
-rules_conf <- sort(rules, by="confidence", decreasing=TRUE) # high-confidence rules
-inspect(head(rules_conf))
-```
+I used the plotting functions from the library `arulesViz` to help understand the association rules through visualizations.
 
 ```{r warning=F, message=F}
 # https://cran.r-project.org/web/packages/arulesViz/vignettes/arulesViz.pdf
 options(digits = 2)
-set.seed(1234)
-summary(grocery_ds)
-```
-
-```{r warning=F, message=F}
-rules <- apriori(grocery_ds, parameter=list(support=0.001, confidence=0.5))
-```
-
-```{r warning=F, message=F}
-rules
-```
-
-```{r warning=F, message=F}
 plot(rules)
 ```
 
-```{r warning=F, message=F}
-head(quality(rules))
-```
+The above scatterplot indicates the relationship the values of Support and Confidence for the 123 association rules generated by with a support value of `r supp_val` and confidence value of `r conf_val`. 
 
 ```{r warning=F, message=F}
 plot(rules, measure=c("support", "lift"), shading="confidence")
 ```
 
+The above scatterplot indicates the relationship the values of Support and Lift for the 123 association rules generated by with a support value of `r supp_val` and confidence value of `r conf_val`. 
+
 ```{r warning=F, message=F}
 plot(rules, method="two-key plot")
 ```
 
+The above two-key scatterplot indicates the relationship the values of Support and Confidence for the 123 association rules generated by with a support value of `r supp_val` and confidence value of `r conf_val` in which order identifies the number of items in the rule.
+
 ```{r warning=F, message=F, fig.height=8}
 plot(rules, method="grouped", control = list(k = 10))
 ```
+
+The above grouped matrix-based visualization uses a balloon plot to show the LHS values as columns and the RHS items as rows. The color of the balloon shows the aggregated interest measure and the size of the balloon show the aggregated support.
 
 ```{r warning=F, message=F}
 subrules2 <- head(rules, n=10, by="lift")
 plot(subrules2, method="graph")
 ```
 
-#30#
+The above graph-based visualization shows the items and rules as vertices and connections with directed edges. The plot helps identify which rules share items.
 
-```{r warning=F, message=F}
+# Conclusion
 
-```
+Overall, the market basket analysis proved straightforward with the use of the `arules` package. In order to tease out some "interesting" associations, then more modifications of the support and confidence levels would be required to find associations with few occurrences but with high confidence values. Too bad this dataset didn't have the diapers to beer connection.
 
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
-
-```{r warning=F, message=F}
-
-```
