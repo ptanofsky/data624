@@ -560,12 +560,26 @@ skim(sdata_test_pp) %>% yank("character")
 We demonstrate building a linear regression model using the pre-processed training data set.
 
 ```{r echo = TRUE}
+# Adjust the training data
+#sdata_train_pp <- sdata_train_pp %>% select(-c(id, MnfFlow, HydPressure1, HydPressure2, HydPressure3))
 
-lm1 = lm(  PH ~ ., data = sdata_train_pp)
+lm1 <- lm(PH ~ ., data = sdata_train_pp)
 
 summary(lm1)
 
 plot(lm1)
+
+summary(sdata_test_pp)
+```
+
+```{r echo = TRUE}
+#####!!!!###
+library(MASS)
+lm_mod <- lm(PH ~ CarbVolume + FillOunces + PCVolume + PSC + PSCCO2 + CarbPressure1 + FillPressure + Temperature + Usagecont + CarbFlow + MFR + OxygenFiller + BowlSetpoint + PressureSetpoint + CarbRel + BrandCode, data=sdata_test_pp)
+step.model <- stepAIC(lm_mod, direction="backward", trace=F)
+
+summary(step.model)
+
 ```
 
 ```{r echo = TRUE}
@@ -587,17 +601,29 @@ The cubist approach is
 "tune the model over values of committees and neighbors through resampling:"
 
 ```{r warning=F, message=F}
+cols_train <- sdata_train_pp
+summary(cols_train)
+```
+
+```{r warning=F, message=F}
+#cols_train <- sdata_train_pp %>% select(-c(MnfFlow, HydPressure1, HydPressure2, HydPressure3))
+#summary(cols_train)
+```
+
+```{r warning=F, message=F}
 library(Cubist)
 
 # from: https://topepo.github.io/Cubist/articles/extras/tuning.html
 grid <- expand.grid(committees = c(1, 10, 50, 100), 
                     neighbors = c(0, 1, 5, 9))
+#grid <- expand.grid(committees = c(100), 
+#                    neighbors = c(5))
 
 # cols for model (removing Id)
-cols_train <- sdata_train_pp %>% select(-c("id"))
+#cols_train <- sdata_train_pp %>% select(-c("id"))
 
 cubist_grid <- train(PH ~ .,
-                     cols_train,
+                     data = sdata_train_pp,
                      method = "cubist",
                      tuneGrid = grid,
                      trControl = trainControl(method = "cv")
@@ -632,11 +658,16 @@ cubist_varImp <- varImp(cubist_grid)
 cubist_varImp
 ```
 
+
+```{r warning=F, message=F}
+#summary(cubist_grid)
+```
+
 ## Boosting
 
 The boosting regression approach relies on stochastic gradient boosting machines.
 
-```{r warning=F, message=F}
+```{r warning=F, message=F, eval=F}
 library(gbm)
 gbm_grid <- expand.grid(interaction.depth = 7,
                        n.trees = seq(500, 1000, by = 100),
@@ -644,7 +675,7 @@ gbm_grid <- expand.grid(interaction.depth = 7,
                        n.minobsinnode = 15)
 
 gbm_tune1 <- train(PH ~ .,
-                   data = cols_train,
+                   data = sdata_train_pp,
                    method = "gbm",
                    tuneGrid = gbm_grid,
                    verbose = FALSE)
@@ -667,13 +698,49 @@ gbm_varImp
 
 ```
 
+```{r warning=F, message=F, eval=F}
+gbm::plot.gbm(gbm_tune1$finalModel, 'MnfFlow')
+
+gbm::plot.gbm(gbm_tune1$finalModel, 'BallingLvl')
+
+gbm::plot.gbm(gbm_tune1$finalModel, 'PressureVacuum')
+
+gbm::plot.gbm(gbm_tune1$finalModel, 'AlchRel')
+
+gbm::plot.gbm(gbm_tune1$finalModel, 'Balling')
+```
+
+```{r warning=F, message=F, eval=F}
+# Make predictions
+pred_pls <- predict(pls_tune1, sdata_test_pp) 
+# Output prediction performance
+pls_test_perf <- postResample(pred=pred_pls, obs=sdata_test_pp$PH)
+pls_test_perf
+
+pls_varImp <- varImp(pls_tune1)
+pls_varImp
+```
+
 
 ## PLS
+
+```{r warning=F, message=F}
+library(tidyverse)
+summary(cols_train)
+
+#cols_train <- cols_train %>% select(-c(MnfFlow, HydPressure1, HydPressure2, HydPressure3))
+
+
+```
 
 Partial Least Squares; Linear Regression
 
 ```{r warning=F, message=F}
 library(pls)
+library(caret)
+
+
+
 # Training PLS model based on book example
 ctrl <- trainControl(method = "cv", number = 10)
 

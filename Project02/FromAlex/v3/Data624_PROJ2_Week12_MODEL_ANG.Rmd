@@ -1,0 +1,490 @@
+---
+title: "Technical Report: Determinants of PH in Beverage Process"
+subtitle: ""
+author: "Alexander Ng, Philip Tanofsky"
+date: "Due 12/13/2021"
+output:
+  tufte::tufte_html: 
+    toc: true
+    toc_depth: '2'
+    highlight: pygments
+    number_sections: no
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    df_print: paged
+    highlight: tango
+    number_sections: yes
+    theme: readable
+    toc: yes
+    toc_depth: 0
+    toc_float: no
+    fontsize: 12
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+# Overview
+
+```{r warning=FALSE, message=FALSE }
+suppressPackageStartupMessages(library(knitr) )
+suppressPackageStartupMessages( library(tidyverse) )
+suppressPackageStartupMessages(library(kableExtra) )
+library(cowplot)
+library(skimr)
+
+library(RColorBrewer)
+library(caret)
+library(Cubist)
+library(rpart)
+suppressPackageStartupMessages(library(gbm) )
+library(party)
+
+```
+
+```{r}
+
+tuningFull = TRUE
+
+```
+
+```{css, echo=FALSE}
+.code-bg {
+  background-color: lightgray;
+}
+```
+
+# Introduction
+
+This technical report tunes multiple models for prediction of beverage PH and identifies determinants of PH among predictors in the manufacturing process.
+We train and test 5 models for this purpose including the Cubist, Gradient Boosted Tree, CART, MARS and linear regression models.
+The training and test performance were
+
+# Importing Data
+
+We load the pre-processed datasets for training and testing in this section.
+We load the csv file for the training data set below and display the first few column characteristics from the file.
+
+```{r data-load, echo = TRUE}
+
+sdata_train_pp = read_csv("sdata_train_pp.csv", 
+                          col_types = cols( .default = "?", id = "i" , BrandCode = "f")) %>% 
+  as_tibble() %>% remove_rownames()
+
+sdata_test_pp  = read_csv("sdata_test_pp.csv", col_types = cols( .default = "?", id = "i" , BrandCode = "f")) %>% 
+  as_tibble() %>% remove_rownames()
+
+sdata_trainX_pp  = sdata_train_pp %>% select( -PH, -id )
+sdata_testX_pp   = sdata_test_pp %>% select(-PH , -id)
+
+```
+
+```{r echo = TRUE}
+
+tuningFull = FALSE   # Set to TRUE if running the lengthy tuning process for all models
+
+```
+
+# Gradient Boosted Trees
+
+We consider the same dataset and variable importance problem using gradient boosted trees.
+The `gbm` library and variable importance measures are run within caret training procedure.
+
+```{r gbm-tuning, echo = TRUE , warning = FALSE}
+set.seed( 1027)
+
+gbmControlFull <- trainControl(method = "repeatedcv", 
+                           number = 10,  # for debug mode, set this to a low number (1)
+                           repeats = 10 ,
+                           selectionFunction = "best", 
+                           verboseIter = FALSE)
+
+gbmControlLight <- trainControl(method = "repeatedcv", 
+                           number = 5,  # for debug mode, set this to a low number (1)
+                           repeats = 1 ,
+                           selectionFunction = "best", 
+                           verboseIter = FALSE)
+
+if(tuningFull == TRUE)
+{
+   gbmControl = gbmControlFull
+   gbmTune = expand.grid( n.trees = c( 1000, 2000), 
+                                                  shrinkage = c( 0.02, 0.05,  0.1 , 0.15 ) ,
+                                                  interaction.depth = c(  3, 7) ,
+                                                  n.minobsinnode = 4
+                                                  )
+} else  {
+   gbmControl = gbmControlLight
+   gbmTune =  expand.grid( n.trees = c( 2000), 
+                                                  shrinkage = c( 0.02, 0.05 , 0.1 ) ,
+                                                  interaction.depth = c(  3, 7) ,
+                                                  n.minobsinnode = 4
+                                                  )
+}
+
+(gbmTune = caret::train( x = sdata_trainX_pp, 
+                          y = sdata_train_pp$PH , 
+                          method = "gbm",
+                          tuneGrid =  gbmTune ,
+                          verbose = FALSE,
+                          metric = "RMSE" ,
+                          trControl = gbmControl ) )
+
+
+```
+
+```{r}
+
+ggplot(gbmTune) + labs(title = "Gradient Boosted Trees - Tuning")
+
+ggplot(varImp(gbmTune, numTrees = gbmTune$finalModel$n.trees) ) + labs(title = "Gradient Boosted Trees - Variance Importance")
+```
+
+# Cubist Model
+
+Now we train a Cubist tree using the `best` selectionFunction on RMSE.
+
+```{r cubist-tuning, echo = TRUE, warning=FALSE, error = FALSE, message=FALSE}
+
+set.seed( 1027)
+
+cubistControlFull <- trainControl(method = "cv" ,  selectionFunction = "best")
+tuneGridFull  <- expand.grid( committees = c( 10, 50, 100 ) ,
+                              neighbors = c( 0, 1, 5, 9 )
+                                                  ) 
+
+cubistControlLight <- trainControl(method = "cv" ,  selectionFunction = "best")
+tuneGridLight <- expand.grid( committees = c( 10, 20 ) , 
+                              neighbors = c( 0, 5 )  )
+
+if(tuningFull == TRUE)
+{
+   cubistControl = cubistControlFull
+   cubistGrid = tuneGridFull
+} else  {
+   cubistControl = cubistControlLight
+   cubistGrid = tuneGridLight
+}
+
+
+
+(cubistTune = caret::train( x = sdata_trainX_pp, 
+                          y = sdata_train_pp$PH , 
+                          method = "cubist",
+                          tuneGrid = cubistGrid ,
+                          verbose = FALSE,
+                          metric = "RMSE" ,
+                          trControl = cubistControl ) )
+
+```
+
+```{r}
+ggplot(cubistTune) + labs(title="Cubist Model Tuning")
+
+ggplot(varImp(cubistTune), top = 20) + labs(title = "Cubist Model Variable Importance")
+```
+
+```{r}
+cubistTune$finalModel
+
+```
+
+```{r}
+cubistTune$finalModel$usage %>% arrange( desc(Model+ Conditions)) %>% 
+  kable(caption = "Cubist Predictor Usage") %>% kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+```{r}
+dotplot( cubistTune$finalModel, what = "splits" )
+
+```
+
+The `dotplot` allows us to allows us to see the distribution of the coefficient parameters for each linear model associated with a committee/rule.\
+When a predictor has more dots, it is used in more models which suggests it is influential.
+The sign of the coefficient tells us whether the marginal effect of the predictor on the response `PH`. However, since Cubist uses many models, the concept of the `sign` of a predictor coefficient is unclear.
+
+```{r}
+dotplot( cubistTune$finalModel, 
+         what = "coefs", 
+         between = list(x = 0.2, y = 0.5) , 
+         scales = list(x = list(relation = "free"),  
+                       y = list(cex = 0.25)  ) )
+
+```
+
+The boxplot below which we devised constructs a distribution of coefficients for each predictor.
+We interpret the sign of the predictor $X$ marginal effect to be the sign of the median of the distribution of coefficients pf $X$ over those models which include $X$.
+The predictors have been sorted by their median.
+
+We see that
+
+```{r}
+cubistTune$finalModel$coefficients %>% 
+  rownames_to_column(var="id") %>% 
+  select(-committee, -rule) %>% 
+  pivot_longer(!id, names_to = "predictor", values_to = "coef" ) %>% 
+  filter( !is.na(coef)) %>% 
+  filter( predictor != '(Intercept)' )  %>%
+  filter(abs(coef) < 20 ) -> coef_piv
+
+coef_piv %>% 
+  ggplot() + 
+  geom_boxplot(
+    aes(x=reorder(predictor, coef, FUN = median, na.rm = TRUE ),  # order the boxplots by median
+        y = coef ), outlier.shape = NA ) +  # strip out the outliers
+  coord_flip(ylim=c(-.5,.5)) +
+  labs(title = "Distribution of Coefficients of Predictors", 
+       subtitle = "from Cubist Committee/Rules",
+       x = "Predictors" ,
+       y = "Coefficient in Linear Model"
+       )
+
+```
+
+# CART Tree
+
+Using the `rpart` library and its training methods, we consider the best CART based on the `RMSE` metric.
+
+```{r cart-tuning, echo = TRUE, warning = FALSE}
+set.seed(10393)
+
+library(rpart)
+cartGrid = expand.grid( maxdepth = seq( 1, 20, by = 1 )  )
+
+cartControl <- trainControl(method = "boot", 
+                            number = 30,  
+                            selectionFunction = "best")
+
+(rpartTune = train( x = sdata_trainX_pp, 
+                    y = sdata_train_pp$PH ,
+                   method = "rpart2" ,
+                   metric = "RMSE" ,
+                   tuneGrid = cartGrid ,
+                   trControl = cartControl ) )
+
+```
+
+```{r}
+
+ggplot(rpartTune) + labs(title="CART Tree Tuning")
+```
+
+```{r}
+ggplot(varImp( rpartTune), top = 20 ) + labs(title = "CART Tree Variable Importance")
+
+```
+
+```{r}
+library(rpart.plot)
+library(partykit)
+
+rpart.plot(rpartTune$finalModel, digits = 3)
+```
+
+CART info goes here XXX
+
+# MARS Model
+
+```{r  mars-tuning , message = FALSE, warning= FALSE, error= FALSE, class.source = 'code-bg'}
+
+if( tuningFull == TRUE )
+{
+    marsGrid = expand.grid( .degree = 1:2, .nprune = seq(2,27, by=5) )
+    marsControl = trainControl(method = "cv", 
+                     number = 10, 
+                
+                     selectionFunction = "best", 
+                     verboseIter = FALSE)
+} else {
+    marsGrid = expand.grid( .degree = 1:2, .nprune = seq(2,25, by = 10 ) )
+    
+    marsControl = trainControl(method = "cv", 
+                     number = 10, 
+                     
+                     selectionFunction = "best", 
+                     verboseIter = TRUE)
+}
+    
+
+set.seed(1000)
+
+marsTuned = caret::train(x = sdata_trainX_pp , 
+                         y = sdata_train_pp$PH, 
+                         method = "earth" ,
+                         metric = "RMSE" , 
+                         tuneGrid = marsGrid ,
+                         trControl = marsControl )
+```
+
+```{r}
+marsTuned$finalModel
+
+summary(marsTuned)
+```
+
+```{r}
+ggplot(marsTuned) + labs(title="MARS Model Tuning" )
+```
+
+```{r}
+
+ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")
+
+```
+
+MARS model goes here XXX
+
+# Linear Regression
+
+We also run a simple OLS regression on PH in terms of the scaled and centered variables.
+While its predictive performance is weaker than the other models on the training set, the coefficients are much easier to interprete.
+
+```{r}
+
+set.seed(123)
+
+train.control <- trainControl( method = "cv", number = 5)
+
+linearTune = train( PH ~ . -id, data = sdata_train_pp, 
+                  method = "lm", 
+                  tuneGrid = data.frame(intercept = TRUE),
+                  trControl = train.control)
+
+summary(linearTune$finalModel)
+
+```
+
+We summarize the plot of coefficients below.
+
+```{r}
+par(mfrow=c(2,2))
+plot(linearTune$finalModel)
+```
+
+```{r}
+hist(linearTune$finalModel$residuals)
+
+```
+
+The diagnostic plots of the OLS model suggest that the histogram of residuals is relatively symmetric and looks normal.
+The QQ plot suggests the model fit does not fully capture the fat tails possibly due to a small number of outliers.
+
+# Model Selection
+
+Based on the above results, we summarize their training and test RMSE and $R^2$ below.
+
+The joint results are tabulated below.
+
+```{r compare-model-results , echo = TRUE }
+
+# Make a list of model results collect them from caret for both training and test data and compare them jointly in a kable()
+
+model_list = list( rpartTune , marsTuned , gbmTune, cubistTune, linearTune)
+
+model_stats = data.frame()
+
+for( modelObj in model_list )
+{
+    if( modelObj$method != 'lm' ){
+        pred_data <- as.numeric( predict( modelObj, newdata=sdata_testX_pp ) )[]
+    }
+    else
+    {
+        pred_data <- as.numeric( predict( modelObj, newdata=sdata_test_pp ))
+    }
+    output <- data.frame( modelName = modelObj$method ,
+                     trainRMSE = getTrainPerf(modelObj)[1,1] ,
+                     trainR2   = getTrainPerf(modelObj)[1,2] ,
+                     testRMSE  = caret::RMSE( pred_data,  sdata_test_pp$PH) ,
+                     testR2    = caret::R2(   pred_data,  sdata_test_pp$PH) 
+                     )
+
+    model_stats <- rbind(model_stats, output)
+}
+
+```
+
+```{r}
+
+
+model_stats %>% as_tibble() %>% 
+  arrange( testRMSE) %>%
+  kable( digits = 3, caption = "Model Results Comparison") %>%
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+We may also inspect the plot of the predicted versus the observed data for the 4 advanced models.
+It is clear below that cubist outperforms all others on both the training set in the upper row and also the test data on the lower rows.
+
+```{r}
+predVals = extractPrediction(list(marsTuned, rpartTune, cubistTune, gbmTune), testX = sdata_testX_pp , testY = sdata_test_pp$PH )
+
+# Plot using Caret built-in reporting.
+# --------------------------------------
+plotObsVsPred(predVals)
+```
+
+We plot the prediction vs actual for the linear regression model below separately but the results still support cubist as being superior.
+
+```{r}
+
+pred_lm =  predict(  linearTune, newdata = sdata_test_pp  )
+
+ggplot() + geom_point( aes(x = pred_lm, y = sdata_test_pp$PH), size = 0.8) + 
+  geom_abline(slope = 1, intercept = 0, col = "red") +
+  theme(aspect.ratio = 1) + labs(title="Linear Model Prediction vs Actual", subtitle = "Test",
+                                 x = "Predicted PH", y = "Actual PH") -> p1
+
+pred_lm_train = linearTune$finalModel$fitted.values
+
+
+ggplot() + geom_point( aes(x = pred_lm_train, y = sdata_train_pp$PH), size = 0.8) + 
+  geom_abline(slope = 1, intercept = 0, col = "red") +
+  theme(aspect.ratio = 1) + labs(title="Linear Model Prediction vs Actual", subtitle = "Train",
+                                 x = "Predicted PH", y = "Actual PH") -> p2
+
+
+plot_grid(p1, p2, ncol = 2)
+
+
+```
+
+# Discussion
+
+We conclude that the best model is Cubist but the multilinear regression model, MARS and CART models provide useful insight on the main predictors.
+
+-   We would recommend the use of the Cubist model for prediction
+-   However, the OLS (ordinary least squares) linear regression help us to understand the sign and magnitude of the most important variables.
+-   The MARS model helps to detect non-linearity and predictor interaction in prediction.
+
+The top 5 variables that impact PH are:
+
+`MnfFlow` - this appears negatively related to `PH` level based on OLS, MARS and Cubist median plot.
+`BallingLvl` is positively related to `PH` level.
+`PreserveVacuum` is negatively related to `PH.` `AlchRel` is positively related to `PH`. `Balling` is negatively related to `PH`.
+
+Lastly, we observe that Brand is probably not a manufacturing predictor that can be controlled.
+Mostly likely Brand refers to a recipe for the final product.
+However, knowing the desired optimal `PH` for each Brand may help us control the most influential variables that control `PH`, thereby providing better quality control.
+While there are over 30 predictors in the dataset, we recommend looking at the top 10 most influential predictors.
+Most of the models agree substantially on which predictors to include in the top 10.
+
+For example, the linear regression model coefficients agrees with the sign and variable importance of the top 10 predictors of the Cubist model.
+Importance predictors of the OLS model has the highest statistical significance - consistent with variable importance measure of `caret`.
+
+# Code
+
+We summarize all the R code used in this project in this appendix for ease of reading.
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
