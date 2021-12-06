@@ -34,12 +34,9 @@ knitr::opts_chunk$set(echo = FALSE)
 # Overview
 
 ```{r warning=FALSE, message=FALSE }
-#suppressPackageStartupMessages(library(knitr) )
-#suppressPackageStartupMessages( library(tidyverse) )
-#suppressPackageStartupMessages(library(kableExtra) )
-library(knitr)
-library(kableExtra)
-library(tidyverse)
+suppressPackageStartupMessages(library(knitr))
+suppressPackageStartupMessages( library(tidyverse))
+suppressPackageStartupMessages(library(kableExtra))
 library(cowplot)
 library(skimr)
 
@@ -47,7 +44,7 @@ library(RColorBrewer)
 library(caret)
 library(Cubist)
 library(rpart)
-suppressPackageStartupMessages(library(gbm) )
+suppressPackageStartupMessages(library(gbm))
 library(party)
 
 ```
@@ -86,13 +83,10 @@ sdata_test_pp  = read_csv("sdata_test_pp.csv", col_types = cols( .default = "?",
 
 sdata_trainX_pp  = sdata_train_pp %>% select( -PH, -id )
 sdata_testX_pp   = sdata_test_pp %>% select(-PH , -id)
-
 ```
 
 ```{r echo = TRUE}
-
 tuningFull = FALSE   # Set to TRUE if running the lengthy tuning process for all models
-
 ```
 
 # Gradient Boosted Trees
@@ -101,7 +95,7 @@ We consider the same dataset and variable importance problem using gradient boos
 The `gbm` library and variable importance measures are run within caret training procedure. The gradient boosting approach relies on a weak learner in an additive manner that minimizes the given loss function. 
 
 ```{r gbm-tuning, echo = TRUE , warning = FALSE}
-set.seed( 1027)
+set.seed(1027)
 
 gbmControlFull <- trainControl(method = "repeatedcv", 
                            number = 10,  # for debug mode, set this to a low number (1)
@@ -139,20 +133,22 @@ if(tuningFull == TRUE)
                           verbose = FALSE,
                           metric = "RMSE" ,
                           trControl = gbmControl ) )
-
-
 ```
 
 As the model output indicates the greater tree depth outperforms the lower counts and the lower shrinkage value produces a lower (better) RMSE value. The shrinkage, or learning rate, works better with smaller values, yet require longer processing time.
 
 ```{r}
-ggplot(gbmTune) + labs(title = "Gradient Boosted Trees - Tuning")
+gbm_plot <- ggplot(gbmTune) + labs(title = "Gradient Boosted Trees - Tuning")
+gbm_plot
+ggsave("GradientBoostedTreesTurning.jpg", gbm_plot)
 ```
 
 The plot of the tuned model clearly shows the better performance with the increased max tree depth but also indicates the lower shrinkage value doesn't guarantee a lower RMSE. For the max tree depth of 3, the lowest shrinkage value does not produce the lowest RMSE for that tree depth.
 
 ```{r}
-ggplot(varImp(gbmTune, numTrees = gbmTune$finalModel$n.trees) ) + labs(title = "Gradient Boosted Trees - Variance Importance")
+gbm_vi_plot <- ggplot(varImp(gbmTune, numTrees = gbmTune$finalModel$n.trees) ) + labs(title = "Gradient Boosted Trees - Variance Importance")
+gbm_vi_plot
+ggsave("GbmVarImp.jpg", gbm_vi_plot)
 ```
 
 The variable importance plot shows the 100% importance of the `MnfFlow` followed by `BrandCode` as the only other variable with an importance above 50%. `Usagecont`, `OxygenFiller`, and `Temperature` round out the top five variables based on importance with scores greater than 25%.
@@ -165,8 +161,7 @@ Now we train a Cubist tree using the `best` selectionFunction on RMSE. The `Cubi
 The Cubist model is a rules-based approach in which the terminal leaves contains linear regression models. The models are based on predictions defined in the previous nodes of the tree.
 
 ```{r cubist-tuning, echo = TRUE, warning=FALSE, error = FALSE, message=FALSE}
-
-set.seed( 1027)
+set.seed(1027)
 
 cubistControlFull <- trainControl(method = "cv" ,  selectionFunction = "best")
 tuneGridFull  <- expand.grid( committees = c( 10, 50, 100 ) ,
@@ -186,8 +181,6 @@ if(tuningFull == TRUE)
    cubistGrid = tuneGridLight
 }
 
-
-
 (cubistTune = caret::train( x = sdata_trainX_pp, 
                           y = sdata_train_pp$PH , 
                           method = "cubist",
@@ -195,7 +188,6 @@ if(tuningFull == TRUE)
                           verbose = FALSE,
                           metric = "RMSE" ,
                           trControl = cubistControl ) )
-
 ```
 
 The Cubist model results provide a good RMSE value and $R^2$ value with a higher number of committees and neighbors.
@@ -203,13 +195,17 @@ The Cubist model results provide a good RMSE value and $R^2$ value with a higher
 The line plot confirms the better model per RMSE with more neighbors and increasing number of committees.
 
 ```{r}
-ggplot(cubistTune) + labs(title="Cubist Model Tuning")
+cubist_plot <- ggplot(cubistTune) + labs(title="Cubist Model Tuning")
+cubist_plot
+ggsave("CubistTuning.jpg", cubist_plot)
 ```
 
 The variable importance plot identifies `MnfFlow` as the most valuable variable followed by `BallingLvl`, `Balling`, `AlchRel`, and `PressureVacuum` to round out the top 5 variables. Overall, 8 variables resulted in over 50% importance indicating those variables are contained in over 50% of the rules defining the Cubist model.
 
 ```{r}
-ggplot(varImp(cubistTune), top = 20) + labs(title = "Cubist Model Variable Importance")
+cubist_vi_plot <- ggplot(varImp(cubistTune), top = 20) + labs(title = "Cubist Model Variable Importance")
+cubist_vi_plot
+ggsave("CubistVarImp.jpg", cubist_vi_plot)
 ```
 
 
@@ -227,27 +223,62 @@ cubistTune$finalModel$usage %>% arrange( desc(Model+ Conditions)) %>%
 The `splits` plot indicates the usage of each variable by committee/rule. The values are normalized and highlight the high usage rate of `MnfFlow` along with the use of greater than or less than inequalities for `MnfFlow`.
 
 ```{r}
-dotplot( cubistTune$finalModel, what = "splits" )
+cubist_splitsplot <- dotplot( cubistTune$finalModel, what = "splits" )
+cubist_splitsplot
+```
+
+```{r}
+jpeg(file="CubistSplitsPlot.jpg")
+cubist_splitsplot
+dev.off()
 ```
 
 The `dotplot` allows us to see the distribution of the coefficient parameters for each linear model associated with a committee/rule.\
-When a predictor has more dots, it is used in more models which suggests it is influential.
-The sign of the coefficient tells us whether the marginal effect of the predictor on the response `PH`. However, since Cubist uses many models, the concept of the `sign` of a predictor coefficient is unclear.
+When a predictor has more dots, it is used in more models which suggests it is influential. The color density is proportional to the variable importance.
+The sign of the coefficient tells us whether the marginal effect of the predictor on the response `PH`. However, since Cubist uses many models, the concept of the `sign` of a predictor coefficient is unclear.\
+The x-axis value of the dot indicates the true coefficient in the original units unlike the above plot which normalizes the x-axis.
 
 ```{r}
-dotplot( cubistTune$finalModel, 
+cubist_dotplot <- dotplot( cubistTune$finalModel, 
          what = "coefs", 
          between = list(x = 0.2, y = 0.5) , 
          scales = list(x = list(relation = "free"),  
                        y = list(cex = 0.25)  ) )
-
+cubist_dotplot
+jpeg(file="CubistDotPlot.jpg")
+cubist_splitsplot
+dev.off()
 ```
 
 The boxplot below which we devised constructs a distribution of coefficients for each predictor.
 We interpret the sign of the predictor $X$ marginal effect to be the sign of the median of the distribution of coefficients pf $X$ over those models which include $X$.
 The predictors have been sorted by their median.
 
-The plot provides clarity regarding the impact of a given variable. The `AlchRel` variable box indicates a positive relationship with the dependent variable `PH`. The most important variable `MnfFlow` box defines a negative coefficient, and thus an inverse effect on `PH`.
+The plot provides clarity regarding the impact of a given variable. The `AlchRel` variable box indicates a positive relationship with the dependent variable `PH`. The most important variable `MnfFlow` box results in a negative coefficient, and thus an inverse effect on `PH`. For all the rules in the final Cubist model, the understanding of the coefficient values for each variable provides a clear relationship to the dependent variable despite the obtuse nature of the Cubist model construction.
+
+Top 10 importance:
+MnfFlow: Negative
+BallingLvl: Positive
+Balling: Negative
+AlchRel: Positive
+PressureVacuum: N
+Density: N
+OxygenFilter: N
+AirPressurer: N
+BowlSetpoint: P
+HydPressure3: P
+
+LM, coeff pos or neg:
+MnfFlow: N-check
+BallingLvl: P-check
+Balling: N-check
+AlchRel: P-check
+PressureVacuum: N-check
+Density: N-check
+OxygenFilter: N-check
+AirPressure: N-check
+BowlSetpoint: P-check
+HydPressure3: P-check
 
 ```{r}
 cubistTune$finalModel$coefficients %>% 
@@ -258,7 +289,7 @@ cubistTune$finalModel$coefficients %>%
   filter( predictor != '(Intercept)' )  %>%
   filter(abs(coef) < 20 ) -> coef_piv
 
-coef_piv %>% 
+cubist_boxplot <- coef_piv %>% 
   ggplot() + 
   geom_boxplot(
     aes(x=reorder(predictor, coef, FUN = median, na.rm = TRUE ),  # order the boxplots by median
@@ -270,6 +301,8 @@ coef_piv %>%
        y = "Coefficient in Linear Model"
        )
 
+cubist_boxplot
+ggsave("CubistBoxPlot.jpg", cubist_boxplot)
 ```
 
 Overall, the final Cubist model results in an RMSE under 0.1 and an $R^2$ just short of 0.7.
@@ -301,16 +334,32 @@ The model output shows increasing tree depth leads to improved RMSE and $R^2$ va
 The below plot displays the improving RMSE value with the increasing tree depth with an optimal tree depth of 19.
 
 ```{r}
-ggplot(rpartTune) + labs(title="CART Tree Tuning")
+cart_tuning_plot <- ggplot(rpartTune) + labs(title="CART Tree Tuning")
+cart_tuning_plot
+ggsave("CartTuningPlot.jpg", cart_tuning_plot)
 ```
 
 Once again, the variable `MnfFlow` is the most important variable with an importance rating of 100%. Six variables achieve an importance score of greater than 50% with `BrandCode`, `Temperature`, and `CarbRel` each achieving greater than 75% importance.
 
 ```{r}
-ggplot(varImp( rpartTune), top = 20 ) + labs(title = "CART Tree Variable Importance")
+cart_vi_plot <- ggplot(varImp( rpartTune), top = 20 ) + labs(title = "CART Tree Variable Importance")
+cart_vi_plot
+ggsave("CartVarImp.jpg", cart_vi_plot)
 ```
 
 The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model.
+
+CART top 10:
+MnfFlow
+BrandCode
+Temperature
+CarbRel
+BallingLvl
+FillerSpeed
+HyPressure3
+Usagecont
+BowlSetpoint
+FillerLevel
 
 ```{r}
 library(rpart.plot)
@@ -368,13 +417,17 @@ summary(marsTuned)
 The plot of the final MARS model indicates increasing the number of terms leads to a lower RMSE.
 
 ```{r}
-ggplot(marsTuned) + labs(title="MARS Model Tuning" )
+mars_tuning_plot <- ggplot(marsTuned) + labs(title="MARS Model Tuning" )
+mars_tuning_plot
+ggsave("MarsTuningPlot.jpg", mars_tuning_plot)
 ```
 
 Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.
 
 ```{r}
-ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")
+mars_vi_plot <- ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")
+mars_vi_plot
+ggsave("MarsVarImp.jpg", mars_vi_plot)
 ```
 
 Overall, the MARS model  XXXPSTXXX
@@ -385,7 +438,6 @@ We also run a simple OLS regression on PH in terms of the scaled and centered va
 While its predictive performance is weaker than the other models on the training set, the coefficients are much easier to interpret.
 
 ```{r}
-
 set.seed(123)
 
 train.control <- trainControl( method = "cv", number = 5)
@@ -397,19 +449,20 @@ linearTune = train( PH ~ . -id,
                     trControl = train.control)
 
 summary(linearTune$finalModel)
-
 ```
 
 We summarize the plot of coefficients below.
 
 ```{r}
 par(mfrow=c(2,2))
-plot(linearTune$finalModel)
+
+lm_final_model_plot <- plot(linearTune$finalModel)
+lm_final_model_plot
+ggsave("LinearModelFinalPlot.jpg", lm_final_model_plot)
 ```
 
 ```{r}
 hist(linearTune$finalModel$residuals)
-
 ```
 
 The diagnostic plots of the OLS model suggest that the histogram of residuals is relatively symmetric and looks normal.
@@ -451,96 +504,57 @@ for( modelObj in model_list )
 ```
 
 ```{r}
-
-
-model_stats %>% as_tibble() %>% 
+results_table <- model_stats %>% as_tibble() %>% 
   arrange( testRMSE) %>%
   kable( digits = 3, caption = "Model Results Comparison") %>%
   kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
 
+results_table
+
+save_kable(results_table, "ModelResultsTable.jpg")
 ```
 
-We may also inspect the plot of the predicted versus the observed data for the 4 advanced models.
+We may also inspect the plot of the predicted versus the observed data for the 5 models.
 It is clear below that cubist outperforms all others on both the training set in the upper row and also the test data on the lower rows.
 
 ```{r}
 predVals = extractPrediction(list(marsTuned, rpartTune, cubistTune, gbmTune), testX = sdata_testX_pp , testY = sdata_test_pp$PH )
 
-predVals
-
-# Plot using Caret built-in reporting.
-# --------------------------------------
-plotObsVsPred(predVals)
-```
-
-We plot the prediction vs actual for the linear regression model below separately but the results still support cubist as being superior.
-
-```{r}
-
-pred_lm =  predict(  linearTune, newdata = sdata_test_pp  )
-
-ggplot() + geom_point( aes(x = pred_lm, y = sdata_test_pp$PH), size = 0.8) + 
-  geom_abline(slope = 1, intercept = 0, col = "red") +
-  theme(aspect.ratio = 1) + labs(title="Linear Model Prediction vs Actual", subtitle = "Test",
-                                 x = "Predicted PH", y = "Actual PH") -> p1
-
-pred_lm_train = linearTune$finalModel$fitted.values
-
-
-ggplot() + geom_point( aes(x = pred_lm_train, y = sdata_train_pp$PH), size = 0.8) + 
-  geom_abline(slope = 1, intercept = 0, col = "red") +
-  theme(aspect.ratio = 1) + labs(title="Linear Model Prediction vs Actual", subtitle = "Train",
-                                 x = "Predicted PH", y = "Actual PH") -> p2
-
-
-plot_grid(p1, p2, ncol = 2)
-
-
-```
-
-```{r}
-length(linearTune$finalModel$fitted.values)
-#2055
-```
-
-```{r}
 # Attempting to hack into the extract prediction object with the LM data
+# Cols: obs pred model dataType object
+pred_lm =  predict(linearTune, newdata = sdata_test_pp)
+pred_lm_train <- linearTune$finalModel$fitted.values
+
+# Create placeholder data for the training values
 model_l <- rep("LM", length = 2055)
 dt_l <- rep("Training", length = 2055)
 obj_l <- rep("Object9", length = 2055)
 
-lm_train_preds <- as.data.frame(cbind(obs=sdata_train_pp$PH, pred=pred_lm_train, model=model_l, dataType=dt_l, object=obj_l))
+# Create dataframe of the training data of LM
+lm_train_preds <- as.data.frame(cbind(obs=sdata_train_pp$PH, pred=pred_lm_train, model=model_l, dataType=dt_l, object=obj_l), row.names = NULL)
 
+# Create placeholder data for the test values
 model_l <- rep("LM", length = 512)
 dt_l <- rep("Test", length = 512)
 obj_l <- rep("Object10", length = 512)
 
-#obs pred model dataType object
-#xx  xx   LM    Training Object5
-
-
+# Create dataframe of the test data of LM
 lm_test_preds <- as.data.frame(cbind(obs=sdata_test_pp$PH, pred=pred_lm, model=model_l, dataType=dt_l, object=obj_l), row.names = NULL)
 
-lm_test_preds
-
-str(predVals)
-
-class(predVals)
-
+# Combine all data for plotting
 all_preds <- rbind(predVals, lm_train_preds, lm_test_preds)
 
-#all_preds <- all_preds %>% `rownames<-`( NULL )
-
+# Ensure obs and preds are numerics
 all_preds$obs <- as.numeric(all_preds$obs)
 all_preds$pred <- as.numeric(all_preds$pred)
 
-str(all_preds)
-
-class(all_preds)
-
-
-plotObsVsPred(all_preds)
+# Plot using Caret built-in reporting.
+# --------------------------------------
+obsVsPredsPlot <- plotObsVsPred(all_preds)
+obsVsPredsPlot
+#ggsave("ObsVsPredsPlot.jpg", obsVsPredsPlot)
 ```
+
 
 # Discussion
 
@@ -582,7 +596,7 @@ edata_test_pp = read_csv("edata_test_pp.csv",
   as_tibble() %>% remove_rownames()
 
 # Train the Cubist model
-set.seed( 1027)
+set.seed(1027)
 
 if(tuningFull == TRUE)
 {
