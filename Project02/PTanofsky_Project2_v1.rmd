@@ -123,24 +123,43 @@ bev.vsurf
 ```
 
 ```{r warning=F, message=F}
-
+summary(bev.vsurf)
 ```
 
 ```{r warning=F, message=F}
-
+plot(bev.vsurf)
 ```
 
 ```{r warning=F, message=F}
-
+print(bev.vsurf)
 ```
 
 ```{r warning=F, message=F}
-
+bev.vsurf$varselect.thres
+  
+bev.vsurf$varselect.interp
+  
+bev.vsurf$varselect.pred
 ```
 
 ```{r warning=F, message=F}
-
+colnames(bev_data_no_nas[,cols])
 ```
+14 total: In order
+9 MnfFlow
+19 Usagecont
+30 Carb Rel
+16 FillerLevel
+29 Alch Rel
+26 Bowl Setpoint
+31 Balling Lvl
+20 Carb Flow
+18 Temperature
+25 Oxygen Filler
+23 Balling
+24 Pressure Vacuum
+17 Filler Speed
+12 Hyd Pressure1
 
 ```{r warning=F, message=F}
 
