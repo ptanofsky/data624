@@ -65,6 +65,7 @@ tuningFull = TRUE
 
 This technical report tunes multiple models for prediction of beverage PH and identifies determinants of PH among predictors in the manufacturing process.
 We train and test 5 models for this purpose including the Cubist, Gradient Boosted Tree, CART, MARS and linear regression models.
+
 The training and test performance were XXXPSTXXX.
 
 # Importing Data
@@ -228,6 +229,7 @@ cubist_splitsplot
 ```
 
 ```{r}
+# Output to file
 jpeg(file="CubistSplitsPlot.jpg")
 cubist_splitsplot
 dev.off()
@@ -254,7 +256,7 @@ The boxplot below which we devised constructs a distribution of coefficients for
 We interpret the sign of the predictor $X$ marginal effect to be the sign of the median of the distribution of coefficients pf $X$ over those models which include $X$.
 The predictors have been sorted by their median.
 
-The plot provides clarity regarding the impact of a given variable. The `AlchRel` variable box indicates a positive relationship with the dependent variable `PH`. The most important variable `MnfFlow` box results in a negative coefficient, and thus an inverse effect on `PH`. For all the rules in the final Cubist model, the understanding of the coefficient values for each variable provides a clear relationship to the dependent variable despite the obtuse nature of the Cubist model construction.
+The plot provides clarity regarding the impact of a given variable as the median is a good estimate of the sign of the variable coefficient. The `AlchRel` variable box indicates a positive relationship with the dependent variable `PH`. The most important variable `MnfFlow` box results in a negative coefficient, and thus an inverse effect on `PH`. For all the rules in the final Cubist model, the understanding of the coefficient values for each variable provides a clear relationship to the dependent variable despite the obtuse nature of the Cubist model construction.
 
 Top 10 importance:
 MnfFlow: Negative
@@ -347,19 +349,32 @@ cart_vi_plot
 ggsave("CartVarImp.jpg", cart_vi_plot)
 ```
 
-The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model.
+The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model. Eight ff the top 10 most important variables in the Cubist model are found in the top 15 variables of the CART model. This overlap of variable imporance shows a consistency across the different model approaches.
 
-CART top 10:
-MnfFlow
+
+CART top 20:
+MnfFlow :IN CUBIST TOP 10
 BrandCode
 Temperature
 CarbRel
-BallingLvl
+BallingLvl :IN CUBIST TOP 10
 FillerSpeed
-HyPressure3
+HyPressure3 :IN CUBIST TOP 10
 Usagecont
-BowlSetpoint
+BowlSetpoint  :IN CUBIST TOP 10
 FillerLevel
+OxygenFiller :IN CUBIST TOP 10
+AirPressurer :IN CUBIST TOP 10
+PressureVacuum :IN CUBIST TOP 10
+Balling :IN CUBIST TOP 10
+FillPressure
+HydPressure1
+PSCFill
+CarbPressure1
+HydPressure2
+PressureSetpoint
+
+
 
 ```{r}
 library(rpart.plot)
@@ -422,7 +437,8 @@ mars_tuning_plot
 ggsave("MarsTuningPlot.jpg", mars_tuning_plot)
 ```
 
-Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.
+Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.\
+The variable `MnfFlow` is influential because the variable effects many other variables in the final model. Due to the cnumerous linear combinations including `MnfFlow`, the relationship to `PH` is difficult to ascertain. The `MnfFlow` variable requires more investigation into the variable interactions to determine the impact to `PH`.
 
 ```{r}
 mars_vi_plot <- ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")
@@ -430,7 +446,7 @@ mars_vi_plot
 ggsave("MarsVarImp.jpg", mars_vi_plot)
 ```
 
-Overall, the MARS model  XXXPSTXXX
+Overall, the MARS model reaffirms the importance of the variable `MnfFlow` and also results in an RMSE and $R^2$ in line with the previous models.
 
 # Linear Regression
 
@@ -451,6 +467,8 @@ linearTune = train( PH ~ . -id,
 summary(linearTune$finalModel)
 ```
 
+The most significant variables are `MnfFlow`, `CarbPressure`, `HydPressure3`, `Temperature`, `Usagecont`, `Balling`, `PressureVacuum`, `OxygenFiller`, `BowlSetpoint`, `BallingLvl`, and `BrandCode`. Seven of these 11 variables are found in the top 10 most important variables of the Cubist model. Upon closer evaluation, the median value of the variable coefficients from the top 10 of the Cubist model match the sign of the coefficient value in the linear regression model. This finding further supports the assessment of the Cubist model variable impacts on the dependent variable `PH`.
+
 We summarize the plot of coefficients below.
 
 ```{r}
@@ -465,8 +483,10 @@ ggsave("LinearModelFinalPlot.jpg", lm_final_model_plot)
 hist(linearTune$finalModel$residuals)
 ```
 
-The diagnostic plots of the OLS model suggest that the histogram of residuals is relatively symmetric and looks normal.
+The diagnostic plots of the OLS model suggest that the histogram of residuals is relatively symmetric and looks normal.\
 The QQ plot suggests the model fit does not fully capture the fat tails possibly due to a small number of outliers.
+
+Overall, the linear regression model does not perform as well as the Cubist model but does provide a valuable sanity check and baseline to the results from the more advanced models.
 
 # Model Selection
 
@@ -586,7 +606,8 @@ For example, the linear regression model coefficients agrees with the sign and v
 Importance predictors of the OLS model has the highest statistical significance - consistent with variable importance measure of `caret`.
 
 # Final Predictions
-```{r}
+
+```{r warning=F, error=F}
 # Combine the initial training and test datasets into 1
 sdata_trainfull_pp <- rbind(sdata_train_pp, sdata_test_pp)
 sdata_trainfullX_pp <- sdata_trainfull_pp %>% select(-PH , -id)
@@ -617,10 +638,15 @@ if(tuningFull == TRUE)
                           metric = "RMSE" ,
                           trControl = cubistControl ) )
 
-cubistTune
-
 # Make predictions on the provided dataset
 final_pred_data <- as.numeric( predict( cubistTune, newdata=edata_test_pp ))
+
+# Output prediction performance
+full_cubist_train_rmse <- getTrainPerf(cubistTune)[1,1]
+full_cubist_train_r2   <- getTrainPerf(cubistTune)[1,2]
+
+full_cubist_train_rmse
+full_cubist_train_r2
 
 # Output the results to file
 # TODO
