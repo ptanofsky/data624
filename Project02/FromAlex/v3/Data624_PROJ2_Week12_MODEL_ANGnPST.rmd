@@ -349,7 +349,7 @@ cart_vi_plot
 ggsave("CartVarImp.jpg", cart_vi_plot)
 ```
 
-The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model. Eight ff the top 10 most important variables in the Cubist model are found in the top 15 variables of the CART model. This overlap of variable imporance shows a consistency across the different model approaches.
+The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model. Eight ff the top 10 most important variables in the Cubist model are found in the top 15 variables of the CART model. This overlap of variable importance shows a consistency across the different model approaches.
 
 
 CART top 20:
@@ -438,7 +438,7 @@ ggsave("MarsTuningPlot.jpg", mars_tuning_plot)
 ```
 
 Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.\
-The variable `MnfFlow` is influential because the variable effects many other variables in the final model. Due to the cnumerous linear combinations including `MnfFlow`, the relationship to `PH` is difficult to ascertain. The `MnfFlow` variable requires more investigation into the variable interactions to determine the impact to `PH`.
+The variable `MnfFlow` is influential because the variable effects many other variables in the final model. Due to the numerous linear combinations including `MnfFlow`, the relationship to `PH` is difficult to ascertain. The `MnfFlow` variable requires more investigation into the variable interactions to determine the impact to `PH`.
 
 ```{r}
 mars_vi_plot <- ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")

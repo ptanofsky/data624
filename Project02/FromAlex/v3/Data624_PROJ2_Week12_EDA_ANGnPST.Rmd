@@ -1,0 +1,652 @@
+---
+title: "Data 624 PROJECT 2 (Week 12) Forecasting EDA"
+subtitle: "Joint Work"
+author: "Alexander Ng, Philip Tanofsky"
+date: "Due 12/13/2021"
+output:
+  tufte::tufte_html: 
+    toc: true
+    toc_depth: '2'
+    highlight: pygments
+    number_sections: no
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+  html_document:
+    df_print: paged
+    highlight: tango
+    number_sections: yes
+    theme: readable
+    toc: yes
+    toc_depth: 0
+    toc_float: no
+    fontsize: 12
+editor_options:
+  chunk_output_type: inline
+  markdown: 
+    wrap: sentence
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+
+```
+
+```{r config-vars}
+# Conditional Code Evaluation is managed here.
+
+```
+
+```{r warning=FALSE, message=FALSE}
+library(knitr)
+library(tidyverse)
+library(kableExtra)
+library(cowplot)
+library(skimr)
+library(GGally) # for ggpairs
+library(readxl) # to parse Excel workbooks
+library(openxlsx) # for writing xlsx files
+library(corrplot)
+library(RColorBrewer)
+library(caret)
+library(VSURF)
+```
+
+```{css, echo=FALSE}
+.code-bg {
+  background-color: lightgray;
+}
+```
+# Problem Statement
+
+This is role playing.  I am your new boss.  I am in charge of production at ABC Beverage and you are a team of data scientists reporting to me.  My leadership has told me that new regulations are requiring us to understand our manufacturing process, the predictive factors and be able to report to them our predictive model of PH.
+
+Please use the historical data set I am providing.  Build and report the factors in BOTH a technical and non-technical report.  I like to use Word and Excel.  Please provide your non-technical report in a  business friendly readable document and your predictions in an Excel readable format.   The technical report should show clearly the models you tested and how you selected your final approach.
+
+Please submit both Rpubs links and .rmd files or other readable formats for technical and non-technical reports.  Also submit the excel file showing the prediction of your models for pH.
+
+
+# Data Wrangling Strategy
+
+We will describe the data wrangling steps in brief before doing any exploratory data analysis and model building.
+After loading the raw data files, our transformations and changes are as follows:
+
+1.   Add a primary key `id` to allow unique identification of all raw observations.
+2.   Drop observations with NA in the response variable `PH`.
+3.   Drop observations with a high number of missing values.  In our case, observations that have more than 4 missing values.
+4.   Rename the variables to remove spaces.
+5.   Split the initial data set using stratified sampling based on `PH` value into a 80/20 train and validate data set.  We recognize that a test data set exists but this is for external assessment of the project prediction accuracy.
+6.   Identify and drop near zero variance predictors in the training set.  And apply the same predictor removals to the validation data set (regardless of their values in the latter).
+7.   Identify and fix zeros and outliers in the predictors in the training set as follows:
+  + Identify outliers based on extreme Z scores (e.g. the z-score of the predictor min and max)
+  + Decide if their values are plausible or implausible.  Choose an outlier threshhold.
+  + Replace all such values by the column median among the training set population.
+
+8.   Handle special cases of variables:
+  +  Replace the missing `BrandCode` categorical value with a dummy BrandCode `E`
+  +  Impute `MFR` missing value with the training set median.
+  
+9.   Apply the knn imputation strategy to Box-Cox transformed, scaled, centered observations for all training set points.
+
+Along the way, we will assess the numerical impact of such changes to the dataset.
+
+
+```{r}
+
+raw_StudentData <- read_excel("StudentData.xlsx")
+dim(raw_StudentData)
+```
+
+Let's evaluate the data characteristics of the raw file after loading.  We use the `skimr` library to get statistics quickly for the entire training data set.   The table below shows the numeric variables sorted by their completion rate in descending order.  So the most problematic
+predictors are at the top of the table.
+
+```{r}
+skim(raw_StudentData) %>% 
+  yank("numeric") %>% 
+  arrange( complete_rate) %>% 
+  kable( digits = 3 ) %>% 
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+
+Next, we display the one character variable `Brand` below and its `skimr` output below.
+
+```{r}
+skim(raw_StudentData) %>% yank("character") %>%
+  kable(  caption = "Character Variables in Beverage Data" , digits = 3) %>% 
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+After loading the raw Excel file, we find the training dataset has 2571 observations with 32 predictors and 1 response variable `PH`.
+
+
+General observations about the `skimr` results:
+
+*   The predictor `MFR` is missing the most data:  about 8% (212) of its observations are missing.  The percentage of missing observations is too high for automated imputation in our opinion.  
+*   The predictor `Filler Speed` is missing the next most data: about 2.2% (57) of its observations are missing.  The percentage is low enough for us to consider imputation.
+*   The overall data completeness rate is very high.  We regard this dataset has being very high quality.  21 predictors have completeness rates over 99%.  Except for `MFR`, `Brand`, all of the other predictors have data completeness rates over 97.8%.   Therefore, except for `Brand` and `MFR`, an automated data imputation policy can be considered for those columns.
+*   The response `PH` has 4 missing observations.   We will decide to drop those 4 observations as we do not wish to impute the response.
+
+
+Our first transformation below is to add a unique identifier `id` based on row number to obtain a primary key.  
+Then we drop the 4 observations which are missing `PH` values, rearrange the response variable `PH` and `BrandCode` for our convenience.
+Lastly, we also eliminate spaces from the predictor column names to avoid using quote in our code.
+
+
+```{r echo = TRUE }
+raw_StudentData %>% 
+  rename_with(~ str_replace(., " ", ""),  everything() ) %>%
+  mutate( id = row_number() )  %>% 
+  relocate(id) %>%
+  relocate(PH, .after = id) %>%
+  relocate(`BrandCode`, .after = `BallingLvl` ) %>%
+  filter( !is.na(PH)) %>% as_tibble() ->  sdata_v1
+
+dim(sdata_v1)
+```
+
+## Rows with Missing Data
+
+Is there any observations with a high number of missing observations?  
+
+
+```{r echo= TRUE}
+# include any rows where any column is NA.  Always include id column
+sdata_v1 %>% dplyr::filter_all( any_vars(is.na(.))) -> x1  
+
+# only include those columns where some row has NA in that column
+# this dataset has no id column / so no primary key
+x1 %>% select_if( ~ any(is.na(.) ) ) -> x2
+
+# But the order of the missing observations is same in x1 and x2
+# so add back the id and put it on the left side of tibble
+x2 %>% mutate( id = x1$id  ) %>% relocate(id)-> missing_train_rows
+  
+dim(missing_train_rows)
+```
+
+We find there are 529 observations with NA observations.  So `r sprintf("%.1f%%", 100* nrow(x2)/nrow(sdata_v1))` have NA values.
+We conclude that the NA values are sufficiently well distributed that removal of all observations with NA values is impractical.
+
+In the marginal table below, we investigate if certain observations have a high incidence of NA values amongst their predictors.
+The answer shows that the incident of multiple 
+
+```{r}
+missing_train_rows %>% mutate( num_na = rowSums(is.na(.))) -> missing_train_summary
+
+missing_train_summary %>% group_by(num_na) %>%
+  summarize( count = n()) %>%
+  kable( caption = "Number of Rows with NA") %>%
+  kable_styling(position = "left", bootstrap_options = c("hover", "striped"))
+```
+
+```{r}
+num_na_cells = sum( missing_train_summary$num_na)
+num_cells = nrow(sdata_v1) * 32  # excludes the response variable PH since we dropped its values.
+
+print(paste0("There are ", num_na_cells , " cells with NA values out of ", num_cells, " equivalent to: " , sprintf("%.2f%%", 100 * num_na_cells / num_cells ) ) )
+```
+
+Overall, only 1 percent of cells have missing values.  
+The concentration of missing values seems to decline at a geometric ratio suggesting
+independence among the occurence of missing values.
+
+# Evaluation of Missing Data in the Test Set
+
+```{r}
+raw_StudentEvaluation <- read_excel("StudentEvaluation.xlsx")
+dim(raw_StudentEvaluation)
+```
+
+
+```{r}
+skim(raw_StudentEvaluation) %>% 
+  yank("numeric") %>% 
+  arrange( complete_rate) %>% 
+  kable( digits = 3 ) %>% 
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+```{r}
+skim(raw_StudentEvaluation) %>% yank("character") %>%
+  kable(  caption = "Character Variables in Beverage Data" , digits = 3) %>% 
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+```
+
+
+```{r}
+raw_StudentEvaluation %>% 
+  rename_with(~ str_replace(., " ", ""),  everything() ) %>%
+  mutate( id = row_number() )  %>% 
+  relocate(id) %>%
+  relocate(PH, .after = id) %>%
+  relocate(`BrandCode`, .after = `BallingLvl` )  %>% as_tibble() ->  edata_v1
+
+dim(edata_v1)
+```
+
+
+```{r echo= TRUE}
+# include any rows where any column is NA.  Always include id column
+#
+#  NOTE THAT WE EXCLUDE PH because the response variable (by design) is NA
+#  for all observations in the test set.
+edata_v1 %>% select(-PH) %>% dplyr::filter_all( any_vars(is.na(.))) -> ex1  
+
+# only include those columns where some row has NA in that column
+# this dataset has no id column / so no primary key
+ex1 %>% select_if( ~ any(is.na(.) ) ) -> ex2
+
+# But the order of the missing observations is same in x1 and x2
+# so add back the id and put it on the left side of tibble
+ex2 %>% mutate( id = ex1$id  ) %>% relocate(id)-> missing_test_rows
+  
+dim(missing_test_rows)
+```
+
+
+```{r}
+missing_test_rows %>% mutate( num_na = rowSums(is.na(.))) -> missing_test_summary
+
+missing_test_summary %>% group_by(num_na) %>%
+  summarize( count = n()) %>%
+  kable( caption = "Number of Rows with NA") %>%
+  kable_styling(position = "left", bootstrap_options = c("hover", "striped"))
+```
+
+```{r}
+num_na_cells_test = sum( missing_test_summary$num_na)
+num_cells_test = nrow(edata_v1) * 32  # excludes the response variable PH since we dropped its values.
+
+print(paste0("There are ", num_na_cells_test , " cells with NA values (excluding PH) out of ", num_cells_test, " equivalent to: " , 
+             sprintf("%.2f%%", 100 * num_na_cells_test / num_cells_test ) ) )
+
+
+```
+
+```{r}
+skim_sdata = skim(sdata_v1)
+skim_edata = skim(edata_v1)
+
+skim_sdata %>% select(  skim_variable, n_missing, complete_rate) %>% inner_join(skim_edata %>% select(skim_variable, n_missing, complete_rate), by = c("skim_variable") ) %>% filter(skim_variable != 'PH' ) -> skim_complete_rates 
+
+skim_complete_rates %>% rename( training_complete = complete_rate.x, testing_complete = complete_rate.y) -> skim_complete_rates
+```
+
+```{r warning=FALSE, message=FALSE}
+skim_complete_rates %>% as_tibble() %>%  ggplot(aes(x=training_complete, y = testing_complete)) + 
+  geom_point() + geom_smooth(method = "lm") + theme(aspect.ratio = 1) + lims( x = c(0.95, 1), y = c(0.95, 1)) +
+  labs(title = "Completion Rate by Predictor between Training and Test Sets")
+
+```
+
+We conclude that the distribution of missing values in the test set is:
+
+*    the completeness rate of each predictors in the test and training sets are comparable (as illustrated by the scatter plot and linear regression line above)
+*    shows 1.25% of cells are missing out - a very similar rate to the training set.
+*    the distribution of missing values grouped by observation appears to be similar to the training set too.   The frequency of multiple missing values appears independent and declines geometrically with the number of missing values.
+
+## Exploratory Data Analysis
+
+### Scatterplot of Predictor Variables
+
+The scatterplots of the predictor variables against the dependent variable `PH` indicate no clear linear relationship with any predictor variable. The scatterplots indicate some variable measurements are not continuous and instead fall on specific values on the x-axis.
+
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+# Feature plot for the numeric predictor variables against the result variable PH
+cols <- sdata_v1 %>%
+  select(-c('id', 'BrandCode', 'PH')) %>% colnames()
+
+featurePlot(sdata_v1[,cols], 
+            sdata_v1$PH, 
+            plot="scatter",
+            type = c("p", "smooth"),
+            span = .5,
+            layout=c(6,6))
+```
+
+### Density Plots
+
+The density plots of each predictor variable show many predictor variables with non-normal distributions.
+
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+#https://statisticsglobe.com/histogram-density-for-each-column-data-frame-r
+data_long <- sdata_v1[,cols] %>%
+  pivot_longer(cols) %>%
+  as.data.frame()
+
+ggp2 <- ggplot(data_long, aes(x = value)) +
+  geom_density() +
+  facet_wrap(~ name, scales="free") +
+  labs(title = "Density Plot of Predictor Variables")
+ggp2
+```
+
+### Normality Test
+
+The Shapiro-Wilk test of normality is performed on all the numeric predictor variables and the resulting list confirms no p-value above 0.05 and thus no predictor variable follows a normal distribution.
+
+```{r warning=F, message=F}
+# http://www.sthda.com/english/wiki/normality-test-in-r
+# From the output, the p-value > 0.05 implying that the distribution of the data are not significantly different from normal distribution. In other words, we can assume the normality.
+shap_test_res <- lapply(sdata_v1[,cols], shapiro.test)
+# Result: None of the numeric variables are normally distributed.
+
+# https://stackoverflow.com/questions/62306712/how-to-select-only-the-p-value-0-05-after-performing-shapiro-wilk-test-in-rstud
+subset_vector  <- sapply(shap_test_res, function(x) x$p.value > .05)
+results_subset <- shap_test_res[subset_vector]
+
+length(results_subset)
+```
+
+### Distribution by Brand Code
+
+The distribution of the Brand Code, the lone non-numeric predictor variable, shows a high count of brand B, comprising almost half of the samples. Also note, some values are missing for the Brand Code variable.
+
+```{r warning=F, message=F}
+ggplot(data = sdata_v1) +
+  geom_bar(mapping = aes(x = `BrandCode`)) +
+  labs(title = "Distribution of Brand Code")
+```
+
+### Boxplot of PH by Brand Code
+
+The boxplot of PH values by Brand Code certainly captures overlap of the middle two quartiles, which seems reasonable given the PH range is rather narrow. Of note, the median values of the 4 labeled brands and the unlabeled group do appear distinct besides Brand A and the unlabeled.
+
+```{r warning=F, message=F}
+ggplot(data = sdata_v1, mapping = aes(x = `BrandCode`, y = PH)) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Brand Code")
+```
+
+### VSURF
+
+To find significant variables for the models, the VSURF algorithm is applied to the provided dataset. The algorithm identifies 14 variables as significant to the predictions.
+
+* Mnf Flow
+* Usage cont
+* Carb Rel
+* Filler Level
+* Alch Rel
+* Bowl Setpoint
+* Balling Lvl
+* Carb Flow
+* Temperature
+* Oxygen Filler
+* Balling
+* Pressure Vacuum
+* Filler Speed
+* Hyd Pressure1
+
+```{r warning=F, message=F, eval=F}
+sdata_v1_no_nas <- sdata_v1 %>% drop_na()
+
+bev.vsurf <- VSURF(sdata_v1_no_nas[,cols], 
+                   sdata_v1_no_nas$PH,
+                   ntree = 10,
+                   nfor.thres = 20,
+                   nfor.interp = 10, nfor.pred = 10)
+bev.vsurf
+```
+
+```{r warning=F, message=F, eval=F}
+summary(bev.vsurf)
+```
+
+```{r warning=F, message=F, eval=F}
+bev.vsurf$varselect.pred
+```
+
+```{r warning=F, message=F, eval=F}
+colnames(bev_data_no_nas[,cols])
+```
+
+## Data Partition into Training and Test Sets
+
+Next we partition the student evaluation data set by training and test sets.   We will retain the terminology of test set to refer to the validation data set used for model performance assessment outside of the cross validation process.
+
+```{r echo = TRUE, class.source = 'code-bg'}
+set.seed(19372)
+train_indices = createDataPartition( sdata_v1$PH , times = 1, list = FALSE, p = 0.80 )
+
+sdata_test    = sdata_v1[-train_indices , ]
+sdata_train   = sdata_v1[ train_indices , ]
+sdataY_test   = sdata_v1$PH[-train_indices ]
+sdataY_train  = sdata_v1$PH[ train_indices ]
+
+```
+
+## Drop Near Zero Variance Predictors
+
+We conclude there are no near zero variance predictors or constant predictors to be dropped from the training data set.
+
+```{r}
+nearZeroVar(sdata_train, saveMetrics = TRUE) %>% 
+  kable(caption = "No Near Zero Variance Predictors in Training", digits = 2 ) %>%
+  kable_styling(bootstrap_options = c("hover", "striped"), position = "left")
+
+```
+
+## Outliers and Zeros
+
+Next we identify and fix zeros and outliers in the predictors before imputing missing values.  
+The reason is that KNN algorithm may be affected by outliers.
+The table below uses `skim` to report the minimum, maximum, median, mean and standard deviation for each predictor.
+In addition, we construct Z-score metrics that tells us how many standard deviations is the minimum and maximum.
+
+
+$$ \text{zscore_min}(X_i) = \frac{ min(X_i) - \mu(X_i) }{\sigma(X_i)}$$
+$$\text{zscore_max}(X_i) = \frac{ max(X_i) - \mu(X_i) }{\sigma(X_i )}$$
+
+
+```{r}
+skim(sdata_train) %>% 
+ mutate( zscore_min = ((numeric.p0 - numeric.mean) / (numeric.sd) ) ,
+          zscore_max = ((numeric.p100 - numeric.mean) / (numeric.sd) ) ,
+          zscore_extreme = ifelse( abs(zscore_min) > abs(zscore_max) , abs(zscore_min), zscore_max )
+          )  %>%
+  filter( zscore_extreme > 4 , skim_variable != 'PH') %>%
+  arrange( desc(zscore_extreme)) %>%
+  dplyr::select(skim_variable, n_missing, complete_rate, numeric.mean, numeric.sd, numeric.hist, zscore_min, zscore_max ) %>%
+  kable(digits = 2, caption = "Predictors with Outliers by Z-Score" ) %>%
+  kable_styling(bootstrap_options = c("hover" , "striped"), position = "left")
+```
+
+Using scatterplots of each of the 7 identified predictors below, we see no obvious data errors exist in the distribution of the predictors with outlier values.   
+Isolated points exist but lie within a reasonsable proximity to neighboring points in the scatter plot.
+Therefore no data corrections for outliers will be applied to the training data.
+
+```{r error=FALSE, warning=FALSE, message= FALSE}
+pl1 = sdata_train %>% ggplot(aes(x=PH, y = MFR)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl2 = sdata_train %>% ggplot(aes(x=PH, y = OxygenFiller)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl3 = sdata_train %>% ggplot(aes(x=PH, y = Temperature)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl4 = sdata_train %>% ggplot(aes(x=PH, y = CarbRel)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl5 = sdata_train %>% ggplot(aes(x=PH, y = AirPressurer)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl6 = sdata_train %>% ggplot(aes(x=PH, y = PSCCO2)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+pl7 = sdata_train %>% ggplot(aes(x=PH, y = FillPressure)) + geom_point(size=0.3) + theme(aspect.ratio = 1)
+
+plotlist= list(pl1, pl2, pl3, pl4, pl5, pl6, pl7)
+plot_grid(plotlist=plotlist, nrow = 2 )
+
+```
+
+## Handle Special Cases
+
+The code below will transform the special case situations of data pre-processing identified earlier:
+
+*   Replace the MFR missing values with its median value from the training set
+*   Replace the missing BrandCode with a fictional brand code `E`.
+
+These rules are applied consistently to be the training, validation and test data sets prior to subsequent pre processing.
+
+```{r}
+
+median_MFR = median( sdata_train$MFR  , na.rm = TRUE ) 
+
+sdata_train %>% 
+  mutate( MFR = ifelse( is.na(MFR), median_MFR, MFR)) %>%
+  mutate( BrandCode = ifelse( is.na(BrandCode), "E", BrandCode))  -> sdata_v2_train
+
+sdata_test  %>% 
+  mutate( MFR = ifelse( is.na(MFR), median_MFR, MFR)) %>%
+  mutate( BrandCode = ifelse( is.na(BrandCode), "E", BrandCode))  -> sdata_v2_test
+
+edata_v1 %>%
+  mutate( MFR = ifelse( is.na(MFR), median_MFR, MFR)) %>%
+  mutate( BrandCode = ifelse( is.na(BrandCode), "E", BrandCode)) ->  edata_v2
+
+
+```
+
+## KNN Imputation
+
+We apply the caret pre processing function to that training, validation and test data sets.
+
+```{r echo =TRUE}
+
+# Build the caret function to preprocess the Chemical data and impute missing values.
+# There is a bug in caret which causes tibbles to be rejected.  They need to be cast as data frames.
+# ---------------------------------------------------------------------------------
+preProcFunc = preProcess(as.data.frame(sdata_v2_train[,3:33]) , method = c("BoxCox", "center", "scale",  "knnImpute") )
+
+# Becomes the source data for the model building
+sdata_train_pp = predict( preProcFunc,  as.data.frame(sdata_v2_train ) )
+
+# Becomes the final version of test data for validation
+sdata_test_pp  = predict( preProcFunc,  as.data.frame(sdata_v2_test) )
+
+# Need to generate predictions based on test data without known response
+edata_test_pp  = predict( preProcFunc,  as.data.frame(edata_v2) )
+
+
+sdata_trainX_pp  = sdata_train_pp %>% select( -PH)
+sdata_testX_pp   = sdata_test_pp %>% select(-PH)
+edata_testX_pp   = edata_test_pp %>% select( -PH)
+
+```
+
+```{r}
+skim(sdata_train_pp)
+```
+
+```{r}
+skim(sdata_test_pp)
+```
+
+```{r}
+skim(edata_test_pp)
+```
+
+# Data visualization
+
+First, we consider a correlation matrix where pairwise complete observations are allowed for use in computing correlations.   Due to the low percentage of imcomplete cells in the dataset, we prefer this dropping observations with any incomplete columns.
+
+The correlation matrix below uses hierarchical clustering of the predictors to form 6 groups of variables using the `corrplot` package.  This was the most efficient way to gain insight on the related clusters of variables.
+
+```{r message = FALSE, warning = FALSE, echo = TRUE}
+M = cor(sdata_v1[,2:33], use = "pairwise.complete.obs")
+
+corrplot::corrplot(M, method = "ellipse", order = "hclust", addrect = 6 ,  tl.cex = 0.7 )
+```
+
+We compare the correlations to the cleaned pre-processed training data.
+
+```{r message = FALSE, warning = FALSE, echo = TRUE}
+Mpp = cor(sdata_train_pp[,2:33], use = "pairwise.complete.obs")
+corrplot::corrplot(M, method = "ellipse", order = "hclust", addrect = 6 ,  tl.cex = 0.7 )
+
+```
+
+## Exporting the Post-Processed Data Sets
+
+Our last step of preprocessing is to export the data sets.  This need only but done once.
+
+```{r eval=FALSE, echo = TRUE }
+
+readr::write_csv(sdata_train_pp, "sdata_train_pp.csv", append = FALSE )
+
+readr::write_csv(sdata_test_pp, "sdata_test_pp.csv", append = FALSE )
+
+readr::write_csv(edata_test_pp, "edata_test_pp.csv", append = FALSE )
+
+```
+
+The above data files have the following properties and relationships to the original raw files:
+
+```{r}
+
+file_df = tibble( filename = c("sdata_train_pp.csv", "sdata_test_pp.csv", "edata_test_pp.csv"),
+                  primary_key = c("id - consistent with sdata_test_pp", "id - consistent with sdata_train_pp", "id - standalone") ,
+                  response = c("PH - unchanged", "PH - unchanged", "PH - unchanged" ) ,
+                  
+                  numeric_columns = c("BoxCox, center, scaled, imputed","BoxCox, center, scaled, imputed","BoxCox, center, scaled, imputed") ,
+                  num_rows = c(2055, 512, 267 ) ,
+                  file_source = c("StudentData.xlsx", "StudentData.xlsx", "StudentEvaluation.xlsx")
+)
+
+file_df %>% kable(caption = "Pre-Processed Data Files") %>% kable_styling(bootstrap_options = c("hover", "striped"
+                                                                                            ), 
+                                                                          position = "left")
+
+```
+
+An important note about the `id` column.   The `id` in the file `edata_test_pp.csv` is the row number of the same observation in `StudentEvaluation.xlsx`.   But the same is not true for `sdata_train_pp.csv` and `sdata_test_pp.csv` because they are sampled from the source file `StudentData.xlsx`.   The 10th row of `sdata_test_pp.csv` is not necessarily the 10th row of `StudentData.xlsx` rather one should use the `id` field as the corresponding row number of the original file.
+
+# Loading and using the pre-Processed data:
+
+The csv files listed above can be loaded and used for model building with no further transformation.  Since they contain a primary key and the response variables and predictors, they have the necessary information to fit a model and generate predictions on training, validation and test samples.
+
+
+We load the csv file for the training data set below and display the first few column characteristics from the file.
+
+```{r echo = TRUE}
+
+sdata_train_pp = read_csv("sdata_train_pp.csv", col_types = cols( .default = "?", id = "i" , BrandCode = "f")) %>% as_tibble()
+
+skim(sdata_train_pp) %>% yank("numeric") %>% head(n=5)
+
+skim(sdata_train_pp) %>% yank("character") 
+
+```
+
+Now we load the validation data test (20% of the original training observations) below and inspect its initial columns.
+
+```{r}
+sdata_test_pp = read_csv("sdata_test_pp.csv", col_types = cols( .default = "?", id = "i" )) %>% as_tibble()
+
+skim(sdata_test_pp) %>% yank("numeric") %>% head(n=5)
+
+skim(sdata_test_pp) %>% yank("character") 
+
+
+```
+
+
+Now we load the test data test  below and inspect its initial columns.
+
+```{r}
+edata_test_pp = read_csv("edata_test_pp.csv", col_types = cols( .default = "?", id = "i" )) %>% as_tibble()
+
+skim(edata_test_pp) %>% yank("numeric") %>% head(n=5)
+
+skim(sdata_test_pp) %>% yank("character") 
+
+
+```
+
+# Model Building 
+
+We demonstrate building a linear regression model using the pre-processed training data set.
+
+
+
+# Code
+
+We summarize all the R code used in this project in this appendix for ease of reading.
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
