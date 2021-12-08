@@ -87,8 +87,24 @@ featurePlot(bev_data_raw[,cols],
             plot="scatter",
             type = c("p", "smooth"),
             span = .5,
-            layout=c(1,1))
+            layout=c(4,1))
 ```
+
+```{r warning=F, message=F, fig.width=12, fig.height=10}
+#https://statisticsglobe.com/histogram-density-for-each-column-data-frame-r
+library(tidyverse)
+# bev_data_raw$PH
+data_long <- bev_data_raw[,cols] %>%
+  pivot_longer(cols) %>%
+  as.data.frame()
+head(data_long)
+
+ggp2 <- ggplot(data_long, aes(x = value)) +
+  geom_density() +
+  facet_wrap(~ name, scales="free")
+ggp2
+```
+
 
 #30#
 
