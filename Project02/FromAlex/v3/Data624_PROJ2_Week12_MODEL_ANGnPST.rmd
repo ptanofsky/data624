@@ -46,13 +46,8 @@ library(Cubist)
 library(rpart)
 suppressPackageStartupMessages(library(gbm))
 library(party)
-
-```
-
-```{r}
-
-tuningFull = TRUE
-
+library(tictoc)
+tic()
 ```
 
 ```{css, echo=FALSE}
@@ -87,7 +82,7 @@ sdata_testX_pp   = sdata_test_pp %>% select(-PH , -id)
 ```
 
 ```{r echo = TRUE}
-tuningFull = FALSE   # Set to TRUE if running the lengthy tuning process for all models
+tuningFull = TRUE   # Set to TRUE if running the lengthy tuning process for all models
 ```
 
 # Gradient Boosted Trees
@@ -664,3 +659,12 @@ We summarize all the R code used in this project in this appendix for ease of re
 
 ```
 
+Tuning full is `r tuningFull`.
+
+
+9am on 12/8/2021
+Tuning full is FALSE. (589.958 sec elapsed)
+
+```{r}
+toc()
+```

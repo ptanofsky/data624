@@ -50,6 +50,8 @@ library(corrplot)
 library(RColorBrewer)
 library(caret)
 library(VSURF)
+library(tictoc)
+tic()
 ```
 
 ```{css, echo=FALSE}
@@ -649,4 +651,8 @@ We summarize all the R code used in this project in this appendix for ease of re
 
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 
+```
+
+```{r}
+toc()
 ```
