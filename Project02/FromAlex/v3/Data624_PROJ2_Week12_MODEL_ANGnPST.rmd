@@ -35,8 +35,10 @@ knitr::opts_chunk$set(echo = FALSE)
 
 ```{r warning=FALSE, message=FALSE }
 suppressPackageStartupMessages(library(knitr))
-suppressPackageStartupMessages( library(tidyverse))
+suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(rpart.plot))
+suppressPackageStartupMessages(library(partykit))
 library(cowplot)
 library(skimr)
 
@@ -46,8 +48,7 @@ library(Cubist)
 library(rpart)
 suppressPackageStartupMessages(library(gbm))
 library(party)
-library(tictoc)
-tic()
+library(writexl)
 ```
 
 ```{css, echo=FALSE}
@@ -61,7 +62,7 @@ tic()
 This technical report tunes multiple models for prediction of beverage PH and identifies determinants of PH among predictors in the manufacturing process.
 We train and test 5 models for this purpose including the Cubist, Gradient Boosted Tree, CART, MARS and linear regression models.
 
-The training and test performance were XXXPSTXXX.
+The training and test performance are evaluated separately on the StudentData dataset with the metrics RMSE and $R^2$ to determine the model algorithm most appropriate for predicting the PH of the StudentEvaluation dataset.
 
 # Importing Data
 
@@ -131,7 +132,7 @@ if(tuningFull == TRUE)
                           trControl = gbmControl ) )
 ```
 
-As the model output indicates the greater tree depth outperforms the lower counts and the lower shrinkage value produces a lower (better) RMSE value. The shrinkage, or learning rate, works better with smaller values, yet require longer processing time.
+As the model output indicates the greater tree depth outperforms the lower counts and the shrinkage value of 0.05 produces the best RMSE value. The shrinkage, or learning rate, typically works better with smaller values, yet require longer processing time.
 
 ```{r}
 gbm_plot <- ggplot(gbmTune) + labs(title = "Gradient Boosted Trees - Tuning")
@@ -139,7 +140,7 @@ gbm_plot
 ggsave("GradientBoostedTreesTurning.jpg", gbm_plot)
 ```
 
-The plot of the tuned model clearly shows the better performance with the increased max tree depth but also indicates the lower shrinkage value doesn't guarantee a lower RMSE. For the max tree depth of 3, the lowest shrinkage value does not produce the lowest RMSE for that tree depth.
+The plot of the tuned model clearly shows the better performance with the increased max tree depth but also indicates the lower shrinkage value doesn't guarantee a lower RMSE. For the max tree depth of 3 and 7, the lowest shrinkage value does not produce the lowest RMSE for that tree depth.
 
 ```{r}
 gbm_vi_plot <- ggplot(varImp(gbmTune, numTrees = gbmTune$finalModel$n.trees) ) + labs(title = "Gradient Boosted Trees - Variance Importance")
@@ -147,9 +148,9 @@ gbm_vi_plot
 ggsave("GbmVarImp.jpg", gbm_vi_plot)
 ```
 
-The variable importance plot shows the 100% importance of the `MnfFlow` followed by `BrandCode` as the only other variable with an importance above 50%. `Usagecont`, `OxygenFiller`, and `Temperature` round out the top five variables based on importance with scores greater than 25%.
+The variable importance plot shows the 100% importance of the `MnfFlow` followed by `BrandCode` as the only other variable with an importance above 50%. `Usagecont`, `OxygenFiller`, `AlchRel`, and `Temperature` round out the top 6 variables based on importance with scores greater than 25%.
 
-Overall, the final Gradient Boosted model results in an RMSE of approximately 0.13 and an $R^2$ less than 0.5.
+Overall, the final Gradient Boosted model results in an RMSE of approximately 0.132 and an $R^2$ less than 0.5.
 
 # Cubist Model
 
@@ -186,9 +187,9 @@ if(tuningFull == TRUE)
                           trControl = cubistControl ) )
 ```
 
-The Cubist model results provide a good RMSE value and $R^2$ value with a higher number of committees and neighbors.
+The Cubist model results provide a strong RMSE value and $R^2$ value with generally a higher number of committees and neighbors.
 
-The line plot confirms the better model per RMSE with more neighbors and increasing number of committees.
+The line plot confirms the better model per RMSE with neighbors at 5 and committees set to 50.
 
 ```{r}
 cubist_plot <- ggplot(cubistTune) + labs(title="Cubist Model Tuning")
@@ -196,7 +197,7 @@ cubist_plot
 ggsave("CubistTuning.jpg", cubist_plot)
 ```
 
-The variable importance plot identifies `MnfFlow` as the most valuable variable followed by `BallingLvl`, `Balling`, `AlchRel`, and `PressureVacuum` to round out the top 5 variables. Overall, 8 variables resulted in over 50% importance indicating those variables are contained in over 50% of the rules defining the Cubist model.
+The variable importance plot identifies `MnfFlow` as the most valuable variable followed by `Balling`, `BallingLvl`, `AlchRel`, and `PressureVacuum` to round out the top 5 variables. Overall, 7 variables resulted in over 50% importance indicating those variables are contained in over 50% of the rules defining the Cubist model.
 
 ```{r}
 cubist_vi_plot <- ggplot(varImp(cubistTune), top = 20) + labs(title = "Cubist Model Variable Importance")
@@ -231,9 +232,9 @@ dev.off()
 ```
 
 The `dotplot` allows us to see the distribution of the coefficient parameters for each linear model associated with a committee/rule.\
-When a predictor has more dots, it is used in more models which suggests it is influential. The color density is proportional to the variable importance.
-The sign of the coefficient tells us whether the marginal effect of the predictor on the response `PH`. However, since Cubist uses many models, the concept of the `sign` of a predictor coefficient is unclear.\
-The x-axis value of the dot indicates the true coefficient in the original units unlike the above plot which normalizes the x-axis.
+When a predictor has more dots, it is used in more models which suggests the variable is influential. The color density is proportional to the variable importance.
+The sign of the coefficient predicts the marginal effect of the predictor on the response `PH`. However, since Cubist uses many models, the concept of the `sign` of a predictor coefficient can be unclear.\
+The x-axis value of the dot in the `dotplot` indicates the true coefficient in the original units unlike the above plot which normalizes the x-axis.
 
 ```{r}
 cubist_dotplot <- dotplot( cubistTune$finalModel, 
@@ -252,30 +253,6 @@ We interpret the sign of the predictor $X$ marginal effect to be the sign of the
 The predictors have been sorted by their median.
 
 The plot provides clarity regarding the impact of a given variable as the median is a good estimate of the sign of the variable coefficient. The `AlchRel` variable box indicates a positive relationship with the dependent variable `PH`. The most important variable `MnfFlow` box results in a negative coefficient, and thus an inverse effect on `PH`. For all the rules in the final Cubist model, the understanding of the coefficient values for each variable provides a clear relationship to the dependent variable despite the obtuse nature of the Cubist model construction.
-
-Top 10 importance:
-MnfFlow: Negative
-BallingLvl: Positive
-Balling: Negative
-AlchRel: Positive
-PressureVacuum: N
-Density: N
-OxygenFilter: N
-AirPressurer: N
-BowlSetpoint: P
-HydPressure3: P
-
-LM, coeff pos or neg:
-MnfFlow: N-check
-BallingLvl: P-check
-Balling: N-check
-AlchRel: P-check
-PressureVacuum: N-check
-Density: N-check
-OxygenFilter: N-check
-AirPressure: N-check
-BowlSetpoint: P-check
-HydPressure3: P-check
 
 ```{r}
 cubistTune$finalModel$coefficients %>% 
@@ -302,7 +279,7 @@ cubist_boxplot
 ggsave("CubistBoxPlot.jpg", cubist_boxplot)
 ```
 
-Overall, the final Cubist model results in an RMSE under 0.1 and an $R^2$ just short of 0.7.
+Overall, the final Cubist model results in an RMSE under 0.1 and a $R^2$ just below of 0.7.
 
 # CART Tree
 
@@ -346,45 +323,15 @@ ggsave("CartVarImp.jpg", cart_vi_plot)
 
 The CART tree plot of the final model reaffirms the importance of the variable `MnfFlow` as the initial node splits on `MnfFlow`. One of the second level nodes is `BrandCode`, another highly important variable to the CART model. Eight ff the top 10 most important variables in the Cubist model are found in the top 15 variables of the CART model. This overlap of variable importance shows a consistency across the different model approaches.
 
-
-CART top 20:
-MnfFlow :IN CUBIST TOP 10
-BrandCode
-Temperature
-CarbRel
-BallingLvl :IN CUBIST TOP 10
-FillerSpeed
-HyPressure3 :IN CUBIST TOP 10
-Usagecont
-BowlSetpoint  :IN CUBIST TOP 10
-FillerLevel
-OxygenFiller :IN CUBIST TOP 10
-AirPressurer :IN CUBIST TOP 10
-PressureVacuum :IN CUBIST TOP 10
-Balling :IN CUBIST TOP 10
-FillPressure
-HydPressure1
-PSCFill
-CarbPressure1
-HydPressure2
-PressureSetpoint
-
-
-
 ```{r}
-library(rpart.plot)
-library(partykit)
-
 rpart.plot(rpartTune$finalModel, digits = 3)
 ```
 
-Overall, the final CART model results in an RMSE of approximately 0.13 and an $R^2$ less than 0.5.
+Overall, the final CART model results in an RMSE of approximately 0.132 and an $R^2$ less than 0.5.
 
 # MARS Model
 
-Now we train a MARS model based on the implementation of earth from the `caret` library. The MARS approach is a non-linear regression model that doesn't rely on the original variables but instead on surrogate features.
-
-The tuned MARS model defines the derived features as linear combinations of the initial variables.
+Now we train a MARS model based on the implementation of earth from the `caret` library. The MARS approach is a non-linear regression model that does not rely on the original variables but instead on derived features. The tuned MARS model defines the derived features as linear combinations of the initial variables.
 
 ```{r  mars-tuning , message = FALSE, warning= FALSE, error= FALSE, class.source = 'code-bg'}
 
@@ -432,8 +379,9 @@ mars_tuning_plot
 ggsave("MarsTuningPlot.jpg", mars_tuning_plot)
 ```
 
-Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.\
-The variable `MnfFlow` is influential because the variable effects many other variables in the final model. Due to the numerous linear combinations including `MnfFlow`, the relationship to `PH` is difficult to ascertain. The `MnfFlow` variable requires more investigation into the variable interactions to determine the impact to `PH`.
+Once again, the variable `MnfFlow` achieves an importance score of 100%. Only 3 variables reach the score of 50%, the aforementioned `MnfFlow`, `BrandCodeC`, and `AlchRel`.
+
+The variable `MnfFlow` is influential because the variable effects many other variables in the final model. Due to the numerous linear combinations including `MnfFlow`, the relationship to `PH` is difficult to ascertain. The `MnfFlow` variable requires more investigation into the variable interactions to determine the impact to `PH` for the MARS model.
 
 ```{r}
 mars_vi_plot <- ggplot( varImp(marsTuned), 20 ) + labs(title = "MARS Model Variable Importance")
@@ -441,7 +389,7 @@ mars_vi_plot
 ggsave("MarsVarImp.jpg", mars_vi_plot)
 ```
 
-Overall, the MARS model reaffirms the importance of the variable `MnfFlow` and also results in an RMSE and $R^2$ in line with the previous models.
+Overall, the MARS model reaffirms the importance of the variable `MnfFlow` and also results in an RMSE and $R^2$ in line with the previous models for Gradient Boosted Trees and CART.
 
 # Linear Regression
 
@@ -471,7 +419,7 @@ par(mfrow=c(2,2))
 
 lm_final_model_plot <- plot(linearTune$finalModel)
 lm_final_model_plot
-ggsave("LinearModelFinalPlot.jpg", lm_final_model_plot)
+#ggsave("LinearModelFinalPlot.jpg", lm_final_model_plot)
 ```
 
 ```{r}
@@ -529,8 +477,8 @@ results_table
 save_kable(results_table, "ModelResultsTable.jpg")
 ```
 
-We may also inspect the plot of the predicted versus the observed data for the 5 models.
-It is clear below that cubist outperforms all others on both the training set in the upper row and also the test data on the lower rows.
+We also inspect the plot of the predicted versus the observed data for the 5 models.
+The scatterplots below confirm the Cubist model outperforms the others on both the training set in the upper row and also the test data on the lower rows. The distribution of the Cubist plot mostly closely aligns with the 45-degree line which corresponds to an accurate prediction.
 
 ```{r}
 predVals = extractPrediction(list(marsTuned, rpartTune, cubistTune, gbmTune), testX = sdata_testX_pp , testY = sdata_test_pp$PH )
@@ -597,8 +545,8 @@ However, knowing the desired optimal `PH` for each Brand may help us control the
 While there are over 30 predictors in the dataset, we recommend looking at the top 10 most influential predictors.
 Most of the models agree substantially on which predictors to include in the top 10.
 
-For example, the linear regression model coefficients agrees with the sign and variable importance of the top 10 predictors of the Cubist model.
-Importance predictors of the OLS model has the highest statistical significance - consistent with variable importance measure of `caret`.
+For example, the linear regression model coefficients agree with the sign and variable importance of the top 10 predictors of the Cubist model.
+Importance predictors of the OLS model have the highest statistical significance - consistent with variable importance measure of `caret`.
 
 # Final Predictions
 
@@ -639,16 +587,17 @@ final_pred_data <- as.numeric( predict( cubistTune, newdata=edata_test_pp ))
 # Output prediction performance
 full_cubist_train_rmse <- getTrainPerf(cubistTune)[1,1]
 full_cubist_train_r2   <- getTrainPerf(cubistTune)[1,2]
-
-full_cubist_train_rmse
-full_cubist_train_r2
-
-# Output the results to file
-# TODO
 ```
 
+RMSE of the full StudentData dataset: `r full_cubist_train_rmse`.
+
+$R^2$ of the full StudentData dataset: `r full_cubist_train_r2`.
+
 ```{r}
-final_pred_data
+# Output predictions to Excel file
+raw_StudentEvaluation <- read_excel("StudentEvaluation.xlsx")
+raw_StudentEvaluation$PH <- final_pred_data
+write_xlsx(raw_StudentEvaluation, "ANg_PTanofsky_Ph_Predictions.xlsx")
 ```
 
 # Code
@@ -657,14 +606,4 @@ We summarize all the R code used in this project in this appendix for ease of re
 
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 
-```
-
-Tuning full is `r tuningFull`.
-
-
-9am on 12/8/2021
-Tuning full is FALSE. (589.958 sec elapsed)
-
-```{r}
-toc()
 ```

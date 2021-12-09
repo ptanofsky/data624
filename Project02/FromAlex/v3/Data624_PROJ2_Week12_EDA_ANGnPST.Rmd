@@ -50,8 +50,6 @@ library(corrplot)
 library(RColorBrewer)
 library(caret)
 library(VSURF)
-library(tictoc)
-tic()
 ```
 
 ```{css, echo=FALSE}
@@ -81,7 +79,7 @@ After loading the raw data files, our transformations and changes are as follows
 6.   Identify and drop near zero variance predictors in the training set.  And apply the same predictor removals to the validation data set (regardless of their values in the latter).
 7.   Identify and fix zeros and outliers in the predictors in the training set as follows:
   + Identify outliers based on extreme Z scores (e.g. the z-score of the predictor min and max)
-  + Decide if their values are plausible or implausible.  Choose an outlier threshhold.
+  + Decide if their values are plausible or implausible.  Choose an outlier threshold.
   + Replace all such values by the column median among the training set population.
 
 8.   Handle special cases of variables:
@@ -193,7 +191,7 @@ print(paste0("There are ", num_na_cells , " cells with NA values out of ", num_c
 
 Overall, only 1 percent of cells have missing values.  
 The concentration of missing values seems to decline at a geometric ratio suggesting
-independence among the occurence of missing values.
+independence among the occurrence of missing values.
 
 # Evaluation of Missing Data in the Test Set
 
@@ -291,9 +289,9 @@ We conclude that the distribution of missing values in the test set is:
 *    shows 1.25% of cells are missing out - a very similar rate to the training set.
 *    the distribution of missing values grouped by observation appears to be similar to the training set too.   The frequency of multiple missing values appears independent and declines geometrically with the number of missing values.
 
-## Exploratory Data Analysis
+# Exploratory Data Analysis
 
-### Scatterplot of Predictor Variables
+## Scatterplot of Predictor Variables
 
 The scatterplots of the predictor variables against the dependent variable `PH` indicate no clear linear relationship with any predictor variable. The scatterplots indicate some variable measurements are not continuous and instead fall on specific values on the x-axis.
 
@@ -310,7 +308,7 @@ featurePlot(sdata_v1[,cols],
             layout=c(6,6))
 ```
 
-### Density Plots
+## Density Plots
 
 The density plots of each predictor variable show many predictor variables with non-normal distributions.
 
@@ -327,9 +325,9 @@ ggp2 <- ggplot(data_long, aes(x = value)) +
 ggp2
 ```
 
-### Normality Test
+## Normality Test
 
-The Shapiro-Wilk test of normality is performed on all the numeric predictor variables and the resulting list confirms no p-value above 0.05 and thus no predictor variable follows a normal distribution.
+The Shapiro-Wilk test of normality is performed on all the numeric predictor variables and the resulting list confirms no p-value above 0.05 and thus no predictor variable follows a normal distribution per evaluation.
 
 ```{r warning=F, message=F}
 # http://www.sthda.com/english/wiki/normality-test-in-r
@@ -344,7 +342,7 @@ results_subset <- shap_test_res[subset_vector]
 length(results_subset)
 ```
 
-### Distribution by Brand Code
+## Distribution by Brand Code
 
 The distribution of the Brand Code, the lone non-numeric predictor variable, shows a high count of brand B, comprising almost half of the samples. Also note, some values are missing for the Brand Code variable.
 
@@ -354,7 +352,7 @@ ggplot(data = sdata_v1) +
   labs(title = "Distribution of Brand Code")
 ```
 
-### Boxplot of PH by Brand Code
+## Boxplot of PH by Brand Code
 
 The boxplot of PH values by Brand Code certainly captures overlap of the middle two quartiles, which seems reasonable given the PH range is rather narrow. Of note, the median values of the 4 labeled brands and the unlabeled group do appear distinct besides Brand A and the unlabeled.
 
@@ -364,7 +362,7 @@ ggplot(data = sdata_v1, mapping = aes(x = `BrandCode`, y = PH)) +
   labs(title = "Boxplot of Brand Code")
 ```
 
-### VSURF
+## VSURF
 
 To find significant variables for the models, the VSURF algorithm is applied to the provided dataset. The algorithm identifies 14 variables as significant to the predictions.
 
@@ -383,7 +381,7 @@ To find significant variables for the models, the VSURF algorithm is applied to 
 * Filler Speed
 * Hyd Pressure1
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 sdata_v1_no_nas <- sdata_v1 %>% drop_na()
 
 bev.vsurf <- VSURF(sdata_v1_no_nas[,cols], 
@@ -394,21 +392,17 @@ bev.vsurf <- VSURF(sdata_v1_no_nas[,cols],
 bev.vsurf
 ```
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 summary(bev.vsurf)
 ```
 
-```{r warning=F, message=F, eval=F}
+```{r warning=F, message=F}
 bev.vsurf$varselect.pred
-```
-
-```{r warning=F, message=F, eval=F}
-colnames(bev_data_no_nas[,cols])
 ```
 
 ## Data Partition into Training and Test Sets
 
-Next we partition the student evaluation data set by training and test sets.   We will retain the terminology of test set to refer to the validation data set used for model performance assessment outside of the cross validation process.
+Next we partition the student evaluation data set by training and test sets. We will retain the terminology of test set to refer to the validation data set used for model performance assessment outside of the cross validation process.
 
 ```{r echo = TRUE, class.source = 'code-bg'}
 set.seed(19372)
@@ -458,7 +452,7 @@ skim(sdata_train) %>%
 ```
 
 Using scatterplots of each of the 7 identified predictors below, we see no obvious data errors exist in the distribution of the predictors with outlier values.   
-Isolated points exist but lie within a reasonsable proximity to neighboring points in the scatter plot.
+Isolated points exist but lie within a reasonable proximity to neighboring points in the scatter plot.
 Therefore no data corrections for outliers will be applied to the training data.
 
 ```{r error=FALSE, warning=FALSE, message= FALSE}
@@ -544,7 +538,7 @@ skim(edata_test_pp)
 
 # Data visualization
 
-First, we consider a correlation matrix where pairwise complete observations are allowed for use in computing correlations.   Due to the low percentage of imcomplete cells in the dataset, we prefer this dropping observations with any incomplete columns.
+First, we consider a correlation matrix where pairwise complete observations are allowed for use in computing correlations. Due to the low percentage of incomplete cells in the dataset, we prefer this dropping observations with any incomplete columns.
 
 The correlation matrix below uses hierarchical clustering of the predictors to form 6 groups of variables using the `corrplot` package.  This was the most efficient way to gain insight on the related clusters of variables.
 
@@ -651,8 +645,4 @@ We summarize all the R code used in this project in this appendix for ease of re
 
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 
-```
-
-```{r}
-toc()
 ```
