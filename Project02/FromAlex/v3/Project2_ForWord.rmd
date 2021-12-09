@@ -10,22 +10,38 @@ output: word_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Problem Statement
+# Problem Statement
 
 I am in charge of production at ABC Beverage and you are a team of data scientists reporting to me. My leadership has told me that new regulations are requiring us to understand our manufacturing process, the predictive factors and be able to report to them our predictive model of PH.
 
-## Model Selection
+# Data Wrangling and Imputation
 
-Generated models based on four advanced techniques and one simple technique as a baseline. One model approach Cubist, clearly outperformed the other four approaches based on RMSE and $R^2$ evaluation metrics.
-- Explain train and test based on provided data
+Defense of using all the variables, missing data imputation, replace outliers and zeroes
+
+# Model Building and Results
+
+We generated models based on five approaches, Gradient Boosted Trees, Cubist, CART, MARS, and Linear Regression. TheCubist model clearly outperforms the other four approaches based on RMSE and $R^2$ evaluation metrics. From the data provided the PH value, we trained on 80% and tested on 20% to ensure a confident result to the model. The table below indicates the results on the training and test data for the five models.
 
 ![](ModelResultsTable.jpg){width=25%}
 
-Of the 5 models, here's a high level view of the results of the training and test data of the predictions against the observations.
+The following plot of the 5 models displays the results of the training and test data for the predictions against the observations and confirms Cubist as the clearly better model.
 
 ![](ObsVsPredsPlot.png){width=25%}
 
-## Variable Importance
+## Decision Tree for Context (Better Word)
+
+CART tree: Help to comprehend which variables are valuable
+
+![](CartTreePlot.png){width=25%}
+
+# Model Selection
+
+## Cubist
+
+Results of the full train
+- similar results emerge and thus the model is not overfitting
+
+### Variable Importance
 
 The variable importance of the five models confirmed the overall value of one variable in particular, `Mnf Flow`. XXXPSTXXX Confirmed variables through linear regression and other model approaches
 
@@ -33,7 +49,11 @@ The variable importance of the five models confirmed the overall value of one va
 
 ![](CubistBoxPlot.jpg){width=25%}
 
-Given the Cubist model the top 5 recommendations are 
+## Recommendations
+
+Given the Cubist model the top 5 recommendations for understanding the manufacturing process impact on the PH value.
+
+XXXDouble check these against the final, all-in model results XXX
 
 * Mnf Flow: Inverse Correlation
 
@@ -45,27 +65,7 @@ Given the Cubist model the top 5 recommendations are
 
 * Pressure Vacuum: Slight negative correlation
 
-# BLUF
 
-The Cubist model produces the best RMSE and $R^2$ results over other advanced model techniques of Gradient Boosted Trees (GBM), CART, MARS, and baseline linear regression models.
+# Conclusion
 
-Data pre-processing to address missing values and outliers.
-
-Of the XX (32?) provided predictor variables, variable importance
-
-## Preprocessing info
-
-Defense of using all the variables, missing data imputation, replace outliers and zeroes
-
-
-## Decision Tree to provide more context
-
-CART tree: Help to comprehend which variables are valuable
-
-![](CartTreePlot.png){width=25%}
-
-Results of the full train
-- similar results emerge and thus the model is not overfitting
-
-Variable Importance and impact on PH
-- copy from the final section of the larger doc
+The Cubist model produces the best RMSE and $R^2$ results over other advanced model techniques of Gradient Boosted Trees (GBM), CART, MARS, and baseline linear regression models with a focus on the Mnf Flow predictor for biggest impact on the PH value given the current manufacturing process.
