@@ -1,0 +1,511 @@
+---
+title: "Algorithm Attempt v1"
+author: "Philip Tanofsky"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    number_sections: false
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r warning=FALSE, error=FALSE}
+# Required libraries
+library(tidyverse)
+library(hoopR)
+library(readxl)
+library(writexl)
+library(lubridate)
+library(RMariaDB)
+```
+
+```{r}
+DEBUG_PRINTS <- FALSE
+```
+
+# Introduction
+
+```{r}
+# FUNCTIONS
+
+# ===== XXX =====
+get_todays_date <- function() {
+  today <- Sys.Date()
+  today <- gsub("-", "", today)
+  return(today)
+}
+
+# ===== XXX =====
+get_yesterdays_date <- function() {
+  yday <- Sys.Date()-1
+  yday <- gsub("-", "", yday)
+  return(yday)
+}
+
+convert_date_format <- function(date) {
+  date_t <- date
+  date_t <- gsub("-", "", date)
+  return(date_t)
+}
+
+# ===== XXX =====
+get_nba_games <- function(date) {
+  games <- espn_nba_scoreboard (season = date)
+}
+
+# ===== XXX =====
+convert_team_abbr <- function(name) {
+  
+  abbr <- "0"
+  
+  if (name == "NO") {
+    abbr <- "NOP"
+  } else if (name == "WSH") {
+    abbr <- "WAS"
+  } else if (name == "SA") {
+    abbr <- "SAS"
+  } else if (name == "UTAH") {
+    abbr <- "UTA"
+  } else if (name == "NY") {
+    abbr <- "NYK"
+  } else if (name == "GS") {
+    abbr <- "GSW"
+  } else {
+    abbr <- name
+  }
+  
+  return(abbr)
+}
+
+# ===== XXX =====
+convert_results_format <- function(games, date) {
+  games_l <- games
+  games_l <- games %>% select(c(away_team_abb, away_score, home_team_abb, home_score, game_id))
+  
+  # Convert the abbreviations
+  for(i in 1:nrow(games_l)) {
+    games_l[i,]$away_team_abb <- convert_team_abbr(games_l[i,]$away_team_abb)
+    games_l[i,]$home_team_abb <- convert_team_abbr(games_l[i,]$home_team_abb)
+  }
+  
+  
+  date_formatted <- ymd(as.numeric(date))
+  games_l$DATE <- date_formatted
+  games_l <- games_l %>% rename(c(DATE=DATE, 
+                                  GAME_ID=game_id, 
+                                  AWAY_TEAM=away_team_abb, 
+                                  AWAY_TEAM_SCORE=away_score, 
+                                  HOME_TEAM=home_team_abb, 
+                                  HOME_TEAM_SCORE=home_score))
+  games_l <- games_l[, c("DATE", "GAME_ID", "AWAY_TEAM", "AWAY_TEAM_SCORE", "HOME_TEAM", "HOME_TEAM_SCORE")]
+  return(games_l)
+}
+
+# ===== XXX =====
+add_game_results <- function(games) {
+  games_from_file <- read_excel("NbaGames_v1.xlsx")
+  (nrow(games_from_file))
+  games_bind <- rbind(games_from_file, games)
+  (nrow(games_bind))
+  write_xlsx(games_bind, "NbaGames_v1.xlsx")
+}
+
+add_game_results_to_db <- function(games_df) {
+  
+  localuserpassword <- "BostonCeltics17"
+  
+  # The connection method below uses a password stored in a variable.
+  # To use this set localuserpassword="The password of newspaper_search_results_user"
+  nbaDb <- dbConnect(MariaDB(), 
+                     user='nba_game_statistics_user', 
+                     password=localuserpassword, 
+                     dbname='nba_game_statistics', 
+                     host='localhost')
+
+  dbWriteTable(nbaDb, "schedule", games_df, append=TRUE ) 
+
+  # Disconnect to clean up the connection to the database.
+  dbDisconnect(nbaDb)
+}
+
+# ===== XXX =====
+determine_game_winner <- function(home_score, away_score) {
+  
+  # Default to E for error
+  result <- "E"
+  
+  if (home_score > away_score) {
+    result <- "H"
+  } else if (away_score > home_score) {
+    result <- "A"
+  }
+  
+  return(result)
+}
+
+# ===== XXX =====
+calculate_e_team <- function(team_elo, opp_elo) {
+  
+  dividend <- 1 + 10^((opp_elo - team_elo) / 400)
+  result <- 1 / dividend
+  return(result)
+}
+
+# ===== XXX =====
+calculate_k <- function(mov_winner, elo_diff_winner) {
+  
+  k <- 0
+  dividend <- 0
+  divisor <- 0
+  
+  dividend <- 7.5 + 0.006 * elo_diff_winner
+  
+  divisor <- (mov_winner + 3)^(0.8)
+  
+  k <- 20 * divisor / dividend
+  
+  return(k)
+}
+
+# ===== XXX =====
+calculate_elo_iplus1 <- function(k, s_team, e_team, elo_i) {
+  result <- k * (s_team - e_team) + elo_i
+  return(result)
+}
+
+# ===== XXX =====
+calculate_elo_ratings <- function(home_elo, away_elo, home_score, away_score) {
+  # Add 100 to home elo to account for home court advantage
+  HOME_COURT_ADV <- 100
+  
+  team_winner <- determine_game_winner(home_score, away_score)
+  
+  # Same no matter the winner
+  e_team_home <- calculate_e_team(home_elo+HOME_COURT_ADV, away_elo)
+  e_team_away <- calculate_e_team(away_elo, home_elo+HOME_COURT_ADV)
+  
+  k <- -1
+  s_home <- -1
+  s_away <- -1
+  mov_multiplier <- -1
+  
+  if (team_winner == "H") {
+    # Home team won game
+    k <- calculate_k(home_score-away_score, home_elo+HOME_COURT_ADV-away_elo)
+    s_home <- 1
+    s_away <- 0
+  } else if (team_winner == "A") {
+    # Away team won game
+    k <- calculate_k(away_score-home_score, away_elo-home_elo+HOME_COURT_ADV)
+    s_home <- 0
+    s_away <- 1
+  } else {
+    # Error has occured ... tie game?
+    print("ERROR HAS OCCURRED: Tie Game")
+  }
+  
+  if (DEBUG_PRINTS) {
+    print(k)
+    print(s_away)
+    print(e_team_away)
+    print(away_elo)
+  }
+  
+  home_elo_iplus1 <- calculate_elo_iplus1(k, s_home, e_team_home, home_elo)
+  away_elo_iplus1 <- calculate_elo_iplus1(k, s_away, e_team_away, away_elo)
+  
+  # Round to thousandths place
+  home_elo_iplus1 <- trunc(home_elo_iplus1*10^4)/10^4
+  away_elo_iplus1 <- trunc(away_elo_iplus1*10^4)/10^4
+  
+  return(list(home_elo_iplus1, away_elo_iplus1))
+}
+```
+
+```{r}
+# Validate above functions
+
+# variables for testing
+away_elo_i = 1597
+home_elo_i = 1646
+away_game_score = 116
+home_game_score = 109
+
+(determine_game_winner(home_game_score, away_game_score))
+(determine_game_winner(away_game_score, home_game_score))
+
+(calculate_elo_iplus1(16.165958095828678, 1, 0.29781739790947936, away_elo_i))
+
+(calculate_e_team(home_elo_i+100, away_elo_i))
+(calculate_e_team(away_elo_i, home_elo_i+100))
+
+(calculate_k(away_game_score-home_game_score, away_elo_i-home_elo_i+100))
+```
+
+
+```{r}
+
+
+```
+
+```{r}
+# Get today's data and remove dashes
+date <- get_yesterdays_date()
+
+date <- '20211019'
+
+# Get NBA games for data (today in this case)
+games <- get_nba_games(date)
+#games
+
+games_df <- convert_results_format(games, date)
+games_df
+
+
+localuserpassword <- "BostonCeltics17"
+# The connection method below uses a password stored in a variable.
+# To use this set localuserpassword="The password of newspaper_search_results_user"
+
+nbaDb <- dbConnect(MariaDB(), user='nba_game_statistics_user', password=localuserpassword, dbname='nba_game_statistics', host='localhost')
+
+dbWriteTable(nbaDb, "schedule", games_df, append=TRUE ) 
+
+# Disconnect to clean up the connection to the database.
+
+dbDisconnect(nbaDb)
+
+
+# Add latest games to running file
+#add_game_results(games_df)
+```
+
+#30#
+
+
+
+
+```{r}
+# Get scores from day before
+# Add to Excel of all games
+# Output total number of games/rows before and after
+# DATE - AWAY_TEAM  - AWAY_SCORE - HOME_TEAM - HOME_SCORE - GAME_ID
+
+# Update ELO rating
+
+# Input odds
+dbDisconnect(nbaDb)
+```
+
+
+```{r}
+# GSW vs BKN
+# Game played on December 22, 2020: Opening night
+gsw_elo_i = 1395
+bkn_elo_i = 1489
+gsw_score = 99
+bkn_score = 125
+
+home1_away2 <- calculate_elo_ratings(bkn_elo_i, gsw_elo_i, bkn_score, gsw_score)
+
+print("Home - BKN: ")
+print(home1_away2[1])
+
+print("Away - GSW: ")
+print(home1_away2[2])
+```
+
+
+```{r}
+
+# This got all the current results into the table
+for(i in 1) {
+  date_full <- Sys.Date()-i
+  date <- convert_date_format(date_full)
+  print(date)
+  
+  if (date != '20211125' && date != '20211224') {
+    games <- get_nba_games(date)
+    games_df <- convert_results_format(games, date)
+    add_game_results_to_db(games_df)
+  }
+}
+```
+
+
+LOCK TABLES `elo_rating` WRITE;
+
+# Added the initial score for each team
+INSERT INTO nba_game_statistics.elo_rating VALUES
+('YEARSTARTATL', '2021-10-19', 'ATL', '1570.000'),
+('YEARSTARTBOS', '2021-10-19', 'BOS', '1500.000'),
+('YEARSTARTBKN', '2021-10-19', 'BKN', '1605.000'),
+('YEARSTARTCHA', '2021-10-19', 'CHA', '1438.000'),
+('YEARSTARTCHI', '2021-10-19', 'CHI', '1495.000'),
+('YEARSTARTCLE', '2021-10-19', 'CLE', '1353.000'),
+('YEARSTARTDAL', '2021-10-19', 'DAL', '1541.000'),
+('YEARSTARTDEN', '2021-10-19', 'DEN', '1577.000'),
+('YEARSTARTDET', '2021-10-19', 'DET', '1381.000'),
+('YEARSTARTGSW', '2021-10-19', 'GSW', '1529.000'),
+('YEARSTARTHOU', '2021-10-19', 'HOU', '1346.000'),
+('YEARSTARTIND', '2021-10-19', 'IND', '1487.000'),
+('YEARSTARTLAC', '2021-10-19', 'LAC', '1624.000'),
+('YEARSTARTLAL', '2021-10-19', 'LAL', '1549.000'),
+('YEARSTARTMEM', '2021-10-19', 'MEM', '1541.000'),
+('YEARSTARTMIA', '2021-10-19', 'MIA', '1513.000'),
+('YEARSTARTMIL', '2021-10-19', 'MIL', '1658.000'),
+('YEARSTARTMIN', '2021-10-19', 'MIN', '1439.000'),
+('YEARSTARTNOP', '2021-10-19', 'NOP', '1482.000'),
+('YEARSTARTNYK', '2021-10-19', 'NYK', '1548.000'),
+('YEARSTARTOKC', '2021-10-19', 'OKC', '1309.000'),
+('YEARSTARTORL', '2021-10-19', 'ORL', '1330.000'),
+('YEARSTARTPHI', '2021-10-19', 'PHI', '1609.000'),
+('YEARSTARTPHX', '2021-10-19', 'PHX', '1650.000'),
+('YEARSTARTPOR', '2021-10-19', 'POR', '1581.000'),
+('YEARSTARTSAC', '2021-10-19', 'SAC', '1454.000'),
+('YEARSTARTSAS', '2021-10-19', 'SAS', '1478.000'),
+('YEARSTARTTOR', '2021-10-19', 'TOR', '1449.000'),
+('YEARSTARTUTA', '2021-10-19', 'UTA', '1615.000'),
+('YEARSTARTWAS', '2021-10-19', 'WAS', '1495.000');
+
+UNLOCK TABLES;
+
+
+```{r}
+# Goal: Calculate Elo rating for the current date
+# 1. Pull all the ELO rating rows from previous day
+# 2. Pull NBA game results from previous day
+# 3. Calculate the ELO rating for each team (30) for the current date (morning of)
+# 4. If team doesn't play, then obviously, just copy forward the value
+# 5. Write a new row for each team for the date
+
+# 1. Pull all the ELO rating rows from previous day
+localuserpassword <- "BostonCeltics17"
+# The connection method below uses a password stored in a variable.
+# To use this set localuserpassword="The password of newspaper_search_results_user"
+
+nbaDb <- dbConnect(MariaDB(), user='nba_game_statistics_user', password=localuserpassword, dbname='nba_game_statistics', host='localhost')
+
+
+# You can fetch all results:
+res <- dbSendQuery(nbaDb, "SELECT * FROM elo_rating WHERE DATE = '2021-10-19'")
+elo_ratings_yday <- dbFetch(res)
+dbClearResult(res)
+
+res <- dbSendQuery(nbaDb, "SELECT * FROM schedule WHERE DATE = '2021-10-19'")
+games_yday <- dbFetch(res)
+dbClearResult(res)
+
+#dbWriteTable(nbaDb, "schedule", games_df, append=TRUE ) 
+
+# Disconnect to clean up the connection to the database.
+
+dbDisconnect(nbaDb)
+
+print(elo_ratings_yday)
+print(games_yday)
+```
+
+```{r}
+elo_ratings_today <- elo_ratings_yday
+elo_ratings_today$DATE <- '2021-10-20'
+#print(elo_ratings_today)
+#games_yday[1,]$HOME_TEAM
+
+print(games_yday)
+print(elo_ratings_today)
+for (i in 1:nrow(games_yday)) {
+  # calculate_elo_ratings(home_elo, away_elo, home_score, away_score)
+  home_elo_y_row <- elo_ratings_yday %>% filter(TEAM == games_yday[i,]$HOME_TEAM)
+  away_elo_y_row <- elo_ratings_yday %>% filter(TEAM == games_yday[i,]$AWAY_TEAM)
+  
+  home_elo_y <- home_elo_y_row$ELO_RATING
+  away_elo_y <- away_elo_y_row$ELO_RATING
+  
+  home_score_y <- games_yday[i,]$HOME_TEAM_SCORE
+  away_score_y <- games_yday[i,]$AWAY_TEAM_SCORE
+  
+  # calculate_elo_ratings <- function(home_elo, away_elo, home_score, away_score)
+  elo_results <- calculate_elo_ratings(home_elo_y, away_elo_y, home_score_y, away_score_y)
+  elo_ratings_today$ELO_RATING[elo_ratings_today$TEAM == games_yday[i,]$HOME_TEAM] <- elo_results[[1]]
+  elo_ratings_today$ELO_RATING[elo_ratings_today$TEAM == games_yday[i,]$AWAY_TEAM] <- elo_results[[2]]
+
+  #print(elo_results)
+}
+
+
+elo_ratings_today <- subset(elo_ratings_today, select = -c(GAME_ID))
+print(elo_ratings_today)
+
+
+```
+
+
+```{r}
+localuserpassword <- "BostonCeltics17"
+# The connection method below uses a password stored in a variable.
+# To use this set localuserpassword="The password of newspaper_search_results_user"
+
+nbaDb <- dbConnect(MariaDB(), user='nba_game_statistics_user', password=localuserpassword, dbname='nba_game_statistics', host='localhost')
+
+dbWriteTable(nbaDb, "elo_rating", elo_ratings_today, append=TRUE ) 
+
+# Disconnect to clean up the connection to the database.
+
+dbDisconnect(nbaDb)
+# Above worked, I calculated the Elo for 10/20 based on game results and elo rating
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
